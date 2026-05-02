@@ -43,6 +43,8 @@ const onlineSessionMaxAgeMs = 1000 * 60 * 60 * 6;
 const onlineRequestTimeoutMs = 6500;
 const rewardSongVideoId = "a-fHLBXO8pY";
 const rewardSongDuration = 35;
+const introVideoSrc = "/assets/jaydens-warzone-intro.mp4";
+const introMaxDuration = 150;
 const dragonSpriteSheetSrc = "/assets/enemy-dragon-detail-sheet.png";
 const fireballSpriteSheetSrc = "/assets/fireball-sheet.png";
 const fireballGravity = 3.8;
@@ -360,6 +362,20 @@ app.innerHTML = `
           <button class="secondary-btn" data-ui="reset">Reset Run</button>
         </div>
       </div>
+      <div class="intro-cinematic" data-ui="introCinematic" hidden>
+        <video
+          class="intro-video"
+          data-ui="introVideo"
+          src="${introVideoSrc}"
+          preload="metadata"
+          playsinline
+        ></video>
+        <div class="intro-letterbox"></div>
+        <div class="intro-title">
+          <span>Jayden's Warzone</span>
+        </div>
+        <button class="intro-skip" data-ui="introSkip" type="button">Skip</button>
+      </div>
       <div class="calibration-panel" data-ui="calibration">
         <div class="calibration-card">
           <div class="calibration-header">
@@ -447,6 +463,9 @@ const ui = {
   prompt: document.querySelector('[data-ui="prompt"]'),
   start: document.querySelector('[data-ui="start"]'),
   startSplit: document.querySelector('[data-ui="startSplit"]'),
+  introCinematic: document.querySelector('[data-ui="introCinematic"]'),
+  introVideo: document.querySelector('[data-ui="introVideo"]'),
+  introSkip: document.querySelector('[data-ui="introSkip"]'),
   reset: document.querySelector('[data-ui="reset"]'),
   restart: document.querySelector('[data-ui="restart"]'),
   calibrationOpen: document.querySelector('[data-ui="calibrationOpen"]'),
@@ -762,6 +781,13 @@ const game = {
   revivePrompt: "",
   victoryRedirectScheduled: false,
   messages: []
+};
+const introState = {
+  consumed: false,
+  playing: false,
+  pendingOptions: null,
+  timeout: null,
+  abort: null
 };
 
 const online = {
@@ -5047,6 +5073,75 @@ function requestPointerLockSafe() {
 }
 
 function startGame(options = {}) {
+  if (shouldPlayIntro(options)) {
+    playIntroThenStart(options);
+    return;
+  }
+  startMission(options);
+}
+
+function shouldPlayIntro(options = {}) {
+  return !options.skipIntro && !introState.consumed && !introState.playing && ui.introCinematic && ui.introVideo;
+}
+
+function playIntroThenStart(options = {}) {
+  if (introState.playing) return;
+  introState.consumed = true;
+  introState.playing = true;
+  introState.pendingOptions = { ...options, skipIntro: true };
+  introState.abort?.abort();
+  introState.abort = new AbortController();
+  unlockAudio();
+  setControllerCalibrationOpen(false);
+  ui.prompt.style.display = "none";
+  ui.end.classList.remove("visible");
+  shell.classList.add("intro-mode");
+  ui.introCinematic.hidden = false;
+  ui.introCinematic.classList.add("visible");
+
+  const video = ui.introVideo;
+  video.muted = false;
+  video.volume = 1;
+  try {
+    video.currentTime = 0;
+  } catch {
+    // Some browsers reject seeking before metadata is ready; playback still starts at the beginning on first load.
+  }
+
+  const finish = () => finishIntroCinematic();
+  video.addEventListener("ended", finish, { signal: introState.abort.signal });
+  video.addEventListener("error", finish, { signal: introState.abort.signal });
+  ui.introSkip?.addEventListener("click", finish, { signal: introState.abort.signal });
+  introState.timeout = window.setTimeout(finish, introMaxDuration * 1000);
+
+  const playRequest = video.play();
+  if (playRequest && typeof playRequest.catch === "function") {
+    playRequest.catch(() => {
+      video.muted = true;
+      video.play().catch(finish);
+    });
+  }
+}
+
+function finishIntroCinematic() {
+  if (!introState.playing) return;
+  introState.playing = false;
+  window.clearTimeout(introState.timeout);
+  introState.timeout = null;
+  introState.abort?.abort();
+  introState.abort = null;
+  const options = introState.pendingOptions || { skipIntro: true };
+  introState.pendingOptions = null;
+  startMission(options);
+  ui.introVideo.pause();
+  shell.classList.remove("intro-mode");
+  ui.introCinematic.classList.remove("visible");
+  window.setTimeout(() => {
+    if (!introState.playing) ui.introCinematic.hidden = true;
+  }, 520);
+}
+
+function startMission(options = {}) {
   const splitPlayers = Number(options?.splitPlayers || 0);
   unlockAudio();
   setControllerCalibrationOpen(false);
@@ -5210,6 +5305,10 @@ function bindEvents() {
   window.addEventListener("keydown", (event) => {
     keys.set(event.code, true);
     if (event.code === "Escape") {
+      if (introState.playing) {
+        finishIntroCinematic();
+        return;
+      }
       if (game.calibrationOpen) {
         setControllerCalibrationOpen(false);
         return;
