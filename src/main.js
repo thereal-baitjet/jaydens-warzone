@@ -264,100 +264,83 @@ app.innerHTML = `
         </div>
       </div>
       <div class="prompt" data-ui="prompt">
-        <h1>Jayden's Warzone</h1>
-        <p>
-          Rapid prototype: two-player co-op, 100 AI hostiles, objective combat, M4A1-style rifle,
-          infinite ammo, PS/Xbox-ready first-person movement, slide, prone, lean, ADS,
-          recoil, staged AI squads, battlefield power-ups, and low-poly military scenes.
-        </p>
-        <div class="room-panel">
-          <div>
-            <span class="eyebrow">Online Co-op</span>
-            <div class="room-status" data-ui="roomStatus">Online rooms use one full screen per player.</div>
-          </div>
-          <div class="room-actions">
-            <button class="secondary-btn" data-ui="createRoom">Create Room</button>
-            <div class="room-join">
-              <input data-ui="roomCode" maxlength="5" placeholder="CODE" autocomplete="off" spellcheck="false" />
-              <button class="secondary-btn" data-ui="joinRoom">Join</button>
+        <div class="prompt-header">
+          <span class="eyebrow">Ready Room</span>
+          <h1>Jayden's Warzone</h1>
+          <p>Pick a mode, claim a controller, and deploy.</p>
+        </div>
+        <div class="prompt-actions prompt-actions-main">
+          <button class="primary-btn" data-ui="start">Deploy Solo</button>
+          <button class="secondary-btn" data-ui="startSplit" type="button">3P Split</button>
+          <button class="secondary-btn" data-ui="calibrationOpen" type="button">Calibrate</button>
+        </div>
+        <div class="menu-grid">
+          <div class="room-panel">
+            <div>
+              <span class="eyebrow">Online Co-op</span>
+              <div class="room-status" data-ui="roomStatus">Create or join a room.</div>
+            </div>
+            <div class="room-actions">
+              <button class="secondary-btn" data-ui="createRoom">Create Room</button>
+              <div class="room-join">
+                <input data-ui="roomCode" maxlength="5" placeholder="CODE" autocomplete="off" spellcheck="false" />
+                <button class="secondary-btn" data-ui="joinRoom">Join</button>
+              </div>
+            </div>
+            <div class="lobby-panel" data-ui="lobbyPanel">
+              <div class="lobby-header">
+                <span class="eyebrow">Room</span>
+                <span class="lobby-code" data-ui="lobbyCode">-----</span>
+              </div>
+              <div class="lobby-slots">
+                <div class="lobby-slot" data-ui="lobbyP1">
+                  <span>P1</span>
+                  <strong>Open</strong>
+                </div>
+                <div class="lobby-slot" data-ui="lobbyP2">
+                  <span>P2</span>
+                  <strong>Open</strong>
+                </div>
+                <div class="lobby-slot" data-ui="lobbyP3">
+                  <span>P3</span>
+                  <strong>Open</strong>
+                </div>
+              </div>
+              <div class="skin-select" data-ui="skinSelect">
+                <span class="eyebrow">Skin</span>
+                <div class="skin-options">
+                  ${skinButtonMarkup}
+                </div>
+              </div>
+              <div class="lobby-actions">
+                <button class="primary-btn" data-ui="readyUp" type="button">Ready Up</button>
+                <button class="secondary-btn" data-ui="leaveRoom" type="button">Leave Room</button>
+                <span class="lobby-hint" data-ui="lobbyHint">Create or join a room to ready up.</span>
+              </div>
             </div>
           </div>
-          <div class="lobby-panel" data-ui="lobbyPanel">
-            <div class="lobby-header">
-              <span class="eyebrow">Room</span>
-              <span class="lobby-code" data-ui="lobbyCode">-----</span>
-            </div>
-            <div class="lobby-slots">
-              <div class="lobby-slot" data-ui="lobbyP1">
-                <span>P1</span>
-                <strong>Open</strong>
-              </div>
-              <div class="lobby-slot" data-ui="lobbyP2">
-                <span>P2</span>
-                <strong>Open</strong>
-              </div>
-              <div class="lobby-slot" data-ui="lobbyP3">
-                <span>P3</span>
-                <strong>Open</strong>
+          <div class="controller-select" data-ui="controllerSelect">
+            <div>
+              <span class="eyebrow">Controller</span>
+              <strong data-ui="controllerChoice">Auto Select</strong>
+              <p data-ui="controllerHint">Choose a controller for this window.</p>
+              <div class="prompt-preview" data-ui="promptPreview" aria-label="Controller prompt preview">
+                <span data-prompt-button="0" data-prompt-action="Jump">A</span>
+                <span data-prompt-button="1" data-prompt-action="Crouch">B</span>
+                <span data-prompt-button="2" data-prompt-action="Reload">X</span>
+                <span data-prompt-button="3" data-prompt-action="Switch weapon">Y</span>
+                <span data-prompt-button="6" data-prompt-action="Aim down sights">LT</span>
+                <span data-prompt-button="7" data-prompt-action="Fire">RT</span>
               </div>
             </div>
-            <div class="skin-select" data-ui="skinSelect">
-              <span class="eyebrow">Skin</span>
-              <div class="skin-options">
-                ${skinButtonMarkup}
-              </div>
-            </div>
-            <div class="lobby-actions">
-              <button class="primary-btn" data-ui="readyUp" type="button">Ready Up</button>
-              <button class="secondary-btn" data-ui="leaveRoom" type="button">Leave Room</button>
-              <span class="lobby-hint" data-ui="lobbyHint">Two or three players can ready up to start.</span>
+            <div class="controller-actions">
+              <button class="secondary-btn micro-btn" data-ui="controllerPrev" type="button">Prev</button>
+              <button class="secondary-btn micro-btn" data-ui="controllerDetect" type="button">Detect</button>
+              <button class="secondary-btn micro-btn" data-ui="controllerNext" type="button">Next</button>
             </div>
           </div>
         </div>
-        <div class="controller-select" data-ui="controllerSelect">
-          <div>
-            <span class="eyebrow">This Window's Controller</span>
-            <strong data-ui="controllerChoice">Auto Select</strong>
-            <p data-ui="controllerHint">Choose one controller for this browser window before starting.</p>
-            <div class="prompt-preview" data-ui="promptPreview" aria-label="Controller prompt preview">
-              <span data-prompt-button="0" data-prompt-action="Jump">A</span>
-              <span data-prompt-button="1" data-prompt-action="Crouch">B</span>
-              <span data-prompt-button="2" data-prompt-action="Reload">X</span>
-              <span data-prompt-button="3" data-prompt-action="Switch weapon">Y</span>
-              <span data-prompt-button="6" data-prompt-action="Aim down sights">LT</span>
-              <span data-prompt-button="7" data-prompt-action="Fire">RT</span>
-            </div>
-          </div>
-          <div class="controller-actions">
-            <button class="secondary-btn micro-btn" data-ui="controllerPrev" type="button">Prev</button>
-            <button class="secondary-btn micro-btn" data-ui="controllerDetect" type="button">Detect</button>
-            <button class="secondary-btn micro-btn" data-ui="controllerNext" type="button">Next</button>
-          </div>
-        </div>
-        <div class="controls">
-          <span><strong>Solo Test</strong> one full-screen player on this device</span>
-          <span><strong>3P Split</strong> three local players on one big display</span>
-          <span><strong>Online</strong> one full screen per player with the same room code</span>
-          <span><strong>Squad</strong> up to three online players per room</span>
-          <span><strong>Skin</strong> pick Juan, Benito, or Juliana before readying</span>
-          <span><strong>Controller Slot</strong> assign a separate PS5/Xbox pad per browser window</span>
-          <span><strong>PS/Xbox</strong> DualSense, DualShock, Xbox, and standard gamepads</span>
-          <span><strong>Phone</strong> touch sticks and action buttons are available</span>
-          <span><strong>Room Code</strong> create or join the same Vercel room</span>
-          <span><strong>Song Boxes</strong> shoot 20 glowing crates for 35-second music rewards</span>
-          <span><strong>COD Layout</strong> standard Gamepad API indices stay unchanged for gameplay</span>
-          <span><strong>Prompt Layer</strong> visual labels come from ControllerPromptManager, separate from gameplay input</span>
-          <span><strong>Shoulders</strong> button 4 tactical smoke, button 5 lethal frag</span>
-          <span><strong>Face Buttons</strong> 0 jump, 1 crouch-prone-slide, 2 reload-interact, 3 switch weapon</span>
-          <span><strong>D-Pad</strong> up ping, left fire mode, right streak, down night vision/armor</span>
-          <span><strong>Sticks</strong> up moves forward/look up, right turns right, no inversion</span>
-          <span><strong>Calibration</strong> Menu/Options in-game opens controller tuning</span>
-          <span><strong>Revive</strong> hold the reload/interact prompt near a downed teammate</span>
-        </div>
-        <div class="prompt-actions">
-          <button class="primary-btn" data-ui="start">Solo Test</button>
-          <button class="secondary-btn" data-ui="startSplit" type="button">3P Split Screen</button>
-          <button class="secondary-btn" data-ui="calibrationOpen" type="button">Controller Calibration</button>
+        <div class="prompt-actions prompt-actions-utility">
           <button class="secondary-btn" data-ui="touchToggle" type="button">Touch Controls: Auto</button>
           <button class="secondary-btn" data-ui="reset">Reset Run</button>
         </div>
@@ -2776,18 +2759,18 @@ function updateLobbyUi(room = online.lastRoom) {
   }
   if (ui.start) {
     ui.start.disabled = online.enabled;
-    ui.start.textContent = online.enabled ? "Starts When Squad Ready" : "Solo Test";
+    ui.start.textContent = online.enabled ? "Squad Ready Starts" : "Deploy Solo";
   }
   if (ui.startSplit) {
     ui.startSplit.disabled = online.enabled;
-    ui.startSplit.textContent = online.enabled ? "Split Disabled Online" : "3P Split Screen";
+    ui.startSplit.textContent = online.enabled ? "Online Only" : "3P Split";
   }
   if (ui.createRoom) ui.createRoom.disabled = online.enabled || online.pending;
   if (ui.joinRoom) ui.joinRoom.disabled = online.enabled || online.pending;
   if (ui.roomCode) ui.roomCode.disabled = online.enabled || online.pending;
 
   if (!online.enabled) {
-    setRoomStatus("Online rooms use one full screen per player.");
+    setRoomStatus("Create or join a room.");
     if (ui.lobbyHint) ui.lobbyHint.textContent = "Create or join a room to ready up.";
     return;
   }
