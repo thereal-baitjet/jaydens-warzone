@@ -34,9 +34,9 @@ const skinButtonMarkup = playerSkins.map((skin) => `
     <span>${skin.label}</span>
   </button>
 `).join("");
-const onlineSessionKey = "operation-ironline-online-session-v3";
-const controllerSlotKey = "operation-ironline-controller-slot-v1";
-const instanceBootKey = "operation-ironline-instance-booted-v1";
+const onlineSessionKey = "jaydens-warzone-online-session-v1";
+const controllerSlotKey = "jaydens-warzone-controller-slot-v1";
+const instanceBootKey = "jaydens-warzone-instance-booted-v1";
 const autoControllerSlot = "auto";
 const controllerClaimDurationMs = 6500;
 const onlineSessionMaxAgeMs = 1000 * 60 * 60 * 6;
@@ -575,7 +575,7 @@ const padAxis = Object.freeze({
   rightY: 3
 });
 
-const controllerSettingsKey = "operation-ironline-controller-settings-v3";
+const controllerSettingsKey = "jaydens-warzone-controller-settings-v1";
 const controllerManager = new ControllerManager();
 const promptManager = new PromptManager({ defaultLayout: "ps", initialLayout: "ps" });
 const controllerFlowSummary = "Gameplay uses PS5 semantics on standard Gamepad API indices; prompts always show PlayStation labels.";

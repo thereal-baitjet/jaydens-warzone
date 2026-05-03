@@ -5,10 +5,10 @@ const playerRoles = ["p1", "p2", "p3"];
 const skinIds = new Set(["blue", "black", "three"]);
 const skinAliases = new Map([["gold", "three"]]);
 
-const store = globalThis.__operationIronlineRooms || {
+const store = globalThis.__jaydensWarzoneRooms || {
   rooms: new Map()
 };
-globalThis.__operationIronlineRooms = store;
+globalThis.__jaydensWarzoneRooms = store;
 
 function send(res, status, body) {
   res.statusCode = status;
