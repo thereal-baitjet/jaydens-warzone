@@ -49,6 +49,7 @@ const dragonSpriteSheetSrc = "/assets/enemy-dragon-detail-sheet.png";
 const fireballSpriteSheetSrc = "/assets/fireball-sheet.png";
 const finalBossSpriteSheetSrc = "/assets/final-boss-sheet.png";
 const finalBossCutsceneSrc = "/assets/final-boss-cutscene.png";
+const rumaiaSpriteSheetSrc = "/assets/rumaia-sheet.png";
 const fireballGravity = 3.8;
 const fireballBaseSpeed = 21;
 const fireballRadius = 0.55;
@@ -57,6 +58,11 @@ const finalBossHeight = 11.65;
 const finalBossWidth = 6.35;
 const finalBossIntroDuration = 4.8;
 const finalBossCrashDuration = 3.3;
+const rumaiaHeight = 3.15;
+const rumaiaWidth = 2.35;
+const rumaiaHealth = 200;
+const rumaiaArrivalDelay = 10;
+const nuclearExplosionDuration = 3.8;
 const rewardBoxPositions = [
   [0, 1.0, 68],
   [-8, 1.0, 38],
@@ -206,6 +212,27 @@ app.innerHTML = `
         <span class="eyebrow">3P Local Split</span>
         <strong>Same Device Squad</strong>
         <p>P1 uses the selected controller. P2 and P3 use the next connected controllers.</p>
+      </div>
+      <div class="split-gauge split-gauge-p1" data-split-gauge="p1">
+        <strong>P1</strong>
+        <div class="split-meter"><span>Health</span><i><b data-split-health="p1"></b></i><em data-split-health-text="p1">100</em></div>
+        <div class="split-meter"><span>Armor</span><i><b class="armor" data-split-armor="p1"></b></i><em data-split-armor-text="p1">50</em></div>
+        <div class="split-meter"><span>Stamina</span><i><b class="stamina" data-split-stamina="p1"></b></i><em data-split-stamina-text="p1">100</em></div>
+        <div class="split-ammo"><span data-split-ammo="p1">30</span><small>/<span data-split-reserve="p1">INF</span></small><em data-split-weapon="p1">M4A1</em></div>
+      </div>
+      <div class="split-gauge split-gauge-p2" data-split-gauge="p2">
+        <strong>P2</strong>
+        <div class="split-meter"><span>Health</span><i><b data-split-health="p2"></b></i><em data-split-health-text="p2">100</em></div>
+        <div class="split-meter"><span>Armor</span><i><b class="armor" data-split-armor="p2"></b></i><em data-split-armor-text="p2">50</em></div>
+        <div class="split-meter"><span>Stamina</span><i><b class="stamina" data-split-stamina="p2"></b></i><em data-split-stamina-text="p2">100</em></div>
+        <div class="split-ammo"><span data-split-ammo="p2">30</span><small>/<span data-split-reserve="p2">INF</span></small><em data-split-weapon="p2">M4A1</em></div>
+      </div>
+      <div class="split-gauge split-gauge-p3" data-split-gauge="p3">
+        <strong>P3</strong>
+        <div class="split-meter"><span>Health</span><i><b data-split-health="p3"></b></i><em data-split-health-text="p3">100</em></div>
+        <div class="split-meter"><span>Armor</span><i><b class="armor" data-split-armor="p3"></b></i><em data-split-armor-text="p3">50</em></div>
+        <div class="split-meter"><span>Stamina</span><i><b class="stamina" data-split-stamina="p3"></b></i><em data-split-stamina-text="p3">100</em></div>
+        <div class="split-ammo"><span data-split-ammo="p3">30</span><small>/<span data-split-reserve="p3">INF</span></small><em data-split-weapon="p3">M4A1</em></div>
       </div>
       <div class="hit-marker" data-ui="hit"></div>
       <div class="session-label session-label-player" data-ui="p1Controller">P1 PS5</div>
@@ -373,6 +400,12 @@ app.innerHTML = `
           <p>Commander-class contact. Plane impact imminent.</p>
         </div>
       </div>
+      <div class="nuke-flash" data-ui="nukeFlash" hidden>
+        <div>
+          <span class="eyebrow">RUMAIA</span>
+          <strong>Nuclear Bloom</strong>
+        </div>
+      </div>
       <div class="calibration-panel" data-ui="calibration">
         <div class="calibration-card">
           <div class="calibration-header">
@@ -464,6 +497,7 @@ const ui = {
   introVideo: document.querySelector('[data-ui="introVideo"]'),
   introSkip: document.querySelector('[data-ui="introSkip"]'),
   bossCutscene: document.querySelector('[data-ui="bossCutscene"]'),
+  nukeFlash: document.querySelector('[data-ui="nukeFlash"]'),
   reset: document.querySelector('[data-ui="reset"]'),
   restart: document.querySelector('[data-ui="restart"]'),
   calibrationOpen: document.querySelector('[data-ui="calibrationOpen"]'),
@@ -528,6 +562,21 @@ const ui = {
   p1Controller: document.querySelector('[data-ui="p1Controller"]'),
   p2Controller: document.querySelector('[data-ui="p2Controller"]'),
   p3Controller: document.querySelector('[data-ui="p3Controller"]'),
+  splitGauges: new Map(Array.from(document.querySelectorAll("[data-split-gauge]")).map((panel) => {
+    const role = panel.dataset.splitGauge;
+    return [role, {
+      panel,
+      health: panel.querySelector(`[data-split-health="${role}"]`),
+      healthText: panel.querySelector(`[data-split-health-text="${role}"]`),
+      armor: panel.querySelector(`[data-split-armor="${role}"]`),
+      armorText: panel.querySelector(`[data-split-armor-text="${role}"]`),
+      stamina: panel.querySelector(`[data-split-stamina="${role}"]`),
+      staminaText: panel.querySelector(`[data-split-stamina-text="${role}"]`),
+      ammo: panel.querySelector(`[data-split-ammo="${role}"]`),
+      reserve: panel.querySelector(`[data-split-reserve="${role}"]`),
+      weapon: panel.querySelector(`[data-split-weapon="${role}"]`)
+    }];
+  })),
   chips: {
     ads: document.querySelector('[data-chip="ads"]'),
     sprint: document.querySelector('[data-chip="sprint"]'),
@@ -784,6 +833,13 @@ const game = {
   bossSpawned: false,
   bossDefeated: false,
   bossPlane: null,
+  rumaiaPhase: "idle",
+  rumaiaSpawnAt: 0,
+  rumaiaSpawned: false,
+  rumaia: null,
+  nukeStartedAt: 0,
+  nuke: null,
+  nukeNextSmokeAt: 0,
   messages: []
 };
 const introState = {
@@ -977,6 +1033,17 @@ const bossSpriteCells = {
   down: { x: 616, y: 738, w: 404, h: 252 }
 };
 
+const rumaiaSpriteCells = [
+  { x: 20, y: 18, w: 284, h: 384 },
+  { x: 336, y: 18, w: 286, h: 384 },
+  { x: 650, y: 18, w: 244, h: 382 },
+  { x: 950, y: 16, w: 280, h: 390 },
+  { x: 28, y: 438, w: 282, h: 384 },
+  { x: 336, y: 432, w: 292, h: 390 },
+  { x: 660, y: 438, w: 244, h: 380 },
+  { x: 976, y: 432, w: 246, h: 388 }
+];
+
 function drawContainedCell(ctx, image, cell, maxWidth = 468, maxHeight = 492, yBias = 0) {
   const scale = Math.min(maxWidth / cell.w, maxHeight / cell.h);
   const width = cell.w * scale;
@@ -1016,6 +1083,34 @@ function createBossSpriteTexture(pose = "idle") {
     texture.needsUpdate = true;
   };
   image.src = finalBossSpriteSheetSrc;
+  return texture;
+}
+
+function createRumaiaSpriteTexture(cellIndex = 0) {
+  const cell = rumaiaSpriteCells[cellIndex] || rumaiaSpriteCells[0];
+  const canvas = document.createElement("canvas");
+  canvas.width = 512;
+  canvas.height = 512;
+  const ctx = canvas.getContext("2d");
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = "rgba(186, 83, 220, 0.82)";
+  ctx.beginPath();
+  ctx.ellipse(256, 254, 112, 176, 0, 0, Math.PI * 2);
+  ctx.fill();
+  texture.needsUpdate = true;
+
+  const image = new Image();
+  image.onload = () => {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    drawContainedCell(ctx, image, cell, 430, 476, 4);
+    removeConnectedLightBackground(ctx, canvas.width, canvas.height);
+    trimAlphaToCenter(ctx, canvas.width, canvas.height, 18);
+    texture.needsUpdate = true;
+  };
+  image.src = rumaiaSpriteSheetSrc;
   return texture;
 }
 
@@ -1237,6 +1332,55 @@ function removeConnectedGreyBackground(ctx, width, height) {
   ctx.putImageData(imageData, 0, 0);
 }
 
+function removeConnectedLightBackground(ctx, width, height) {
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const data = imageData.data;
+  const visited = new Uint8Array(width * height);
+  const queue = [];
+
+  const shouldErase = (index) => {
+    const p = index * 4;
+    const r = data[p];
+    const g = data[p + 1];
+    const b = data[p + 2];
+    const a = data[p + 3];
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    return a < 18 || (max - min < 32 && max > 142);
+  };
+
+  const enqueue = (x, y) => {
+    if (x < 0 || x >= width || y < 0 || y >= height) return;
+    const index = y * width + x;
+    if (visited[index] || !shouldErase(index)) return;
+    visited[index] = 1;
+    queue.push(index);
+  };
+
+  for (let x = 0; x < width; x += 1) {
+    enqueue(x, 0);
+    enqueue(x, height - 1);
+  }
+  for (let y = 0; y < height; y += 1) {
+    enqueue(0, y);
+    enqueue(width - 1, y);
+  }
+
+  while (queue.length) {
+    const index = queue.pop();
+    const p = index * 4;
+    data[p + 3] = 0;
+    const x = index % width;
+    const y = Math.floor(index / width);
+    enqueue(x + 1, y);
+    enqueue(x - 1, y);
+    enqueue(x, y + 1);
+    enqueue(x, y - 1);
+  }
+
+  ctx.putImageData(imageData, 0, 0);
+}
+
 function trimAlphaToCenter(ctx, width, height, padding = 14) {
   const imageData = ctx.getImageData(0, 0, width, height);
   const data = imageData.data;
@@ -1342,6 +1486,7 @@ function createSharedAssets() {
   shared.bossSpriteTextures = Object.fromEntries(
     Object.keys(bossSpriteCells).map((pose) => [pose, createBossSpriteTexture(pose)])
   );
+  shared.rumaiaSpriteTextures = Array.from({ length: 8 }, (_, index) => createRumaiaSpriteTexture(index));
   shared.fireballTexture = createFireballSpriteTexture("projectile");
   shared.fireballImpactTexture = createFireballSpriteTexture("impact");
   shared.playerSpriteTextures = playerSpriteSources.map((_, playerIndex) => (
@@ -2059,52 +2204,69 @@ function createEnemy(type, position, seed) {
       damage: 16,
       material: shared.materials.enemyCommander,
       boss: true
+    },
+    rumaia: {
+      health: rumaiaHealth,
+      speed: 0,
+      fireRate: 999,
+      range: 0,
+      accuracy: 0,
+      damage: 0,
+      material: shared.materials.powerOverdrive,
+      harmless: true,
+      rumaia: true
     }
   }[type];
 
   const isBoss = Boolean(config.boss);
+  const isRumaia = Boolean(config.rumaia);
+  const hitboxHeight = isBoss ? finalBossHeight : isRumaia ? rumaiaHeight : 1.9;
+  const hitboxWidth = isBoss ? finalBossWidth : isRumaia ? rumaiaWidth : 1.72;
+  const spriteHeight = isBoss ? finalBossHeight : isRumaia ? rumaiaHeight : type === "commander" ? 4.2 : 3.88;
+  const spriteWidth = isBoss ? finalBossWidth : isRumaia ? rumaiaWidth : type === "commander" ? 4.15 : 3.72;
   const group = new THREE.Group();
   group.position.copy(position);
   scene.add(group);
 
-  const body = new THREE.Mesh(isBoss ? shared.geometries.box : shared.geometries.soldierBody, shared.materials.enemyHitbox);
-  body.position.y = isBoss ? finalBossHeight * 0.5 : 1.0;
-  if (isBoss) body.scale.set(finalBossWidth * 0.82, finalBossHeight * 0.9, 0.72);
+  const body = new THREE.Mesh(isBoss || isRumaia ? shared.geometries.box : shared.geometries.soldierBody, shared.materials.enemyHitbox);
+  body.position.y = isBoss || isRumaia ? hitboxHeight * 0.5 : 1.0;
+  if (isBoss || isRumaia) body.scale.set(hitboxWidth * 0.82, hitboxHeight * 0.9, isRumaia ? 0.46 : 0.72);
   body.castShadow = false;
   group.add(body);
 
   const head = new THREE.Mesh(shared.geometries.soldierHead, shared.materials.enemyHitbox);
-  head.position.y = isBoss ? finalBossHeight * 0.82 : 1.72;
+  head.position.y = isBoss ? finalBossHeight * 0.82 : isRumaia ? rumaiaHeight * 0.8 : 1.72;
   if (isBoss) head.scale.setScalar(4.2);
+  if (isRumaia) head.scale.setScalar(1.45);
   head.castShadow = false;
   group.add(head);
 
   const helmet = new THREE.Mesh(shared.geometries.soldierHead, shared.materials.enemyHitbox);
-  helmet.position.y = isBoss ? finalBossHeight * 0.88 : 1.83;
-  helmet.scale.set(isBoss ? 4.55 : 1.08, isBoss ? 2.1 : 0.56, isBoss ? 4.55 : 1.08);
+  helmet.position.y = isBoss ? finalBossHeight * 0.88 : isRumaia ? rumaiaHeight * 0.87 : 1.83;
+  helmet.scale.set(isBoss ? 4.55 : isRumaia ? 1.56 : 1.08, isBoss ? 2.1 : isRumaia ? 0.82 : 0.56, isBoss ? 4.55 : isRumaia ? 1.56 : 1.08);
   helmet.castShadow = false;
   group.add(helmet);
 
   const leftWing = new THREE.Mesh(shared.geometries.box, shared.materials.enemyHitbox);
-  leftWing.position.set(isBoss ? -finalBossWidth * 0.33 : -0.72, isBoss ? finalBossHeight * 0.5 : 1.55, 0);
-  leftWing.scale.set(isBoss ? finalBossWidth * 0.38 : 0.86, isBoss ? finalBossHeight * 0.86 : 1.28, isBoss ? 0.62 : 0.22);
+  leftWing.position.set(isBoss ? -finalBossWidth * 0.33 : isRumaia ? -rumaiaWidth * 0.28 : -0.72, isBoss ? finalBossHeight * 0.5 : isRumaia ? rumaiaHeight * 0.5 : 1.55, 0);
+  leftWing.scale.set(isBoss ? finalBossWidth * 0.38 : isRumaia ? rumaiaWidth * 0.38 : 0.86, isBoss ? finalBossHeight * 0.86 : isRumaia ? rumaiaHeight * 0.72 : 1.28, isBoss ? 0.62 : isRumaia ? 0.36 : 0.22);
   group.add(leftWing);
 
   const rightWing = new THREE.Mesh(shared.geometries.box, shared.materials.enemyHitbox);
-  rightWing.position.set(isBoss ? finalBossWidth * 0.33 : 0.72, isBoss ? finalBossHeight * 0.5 : 1.55, 0);
-  rightWing.scale.set(isBoss ? finalBossWidth * 0.38 : 0.86, isBoss ? finalBossHeight * 0.86 : 1.28, isBoss ? 0.62 : 0.22);
+  rightWing.position.set(isBoss ? finalBossWidth * 0.33 : isRumaia ? rumaiaWidth * 0.28 : 0.72, isBoss ? finalBossHeight * 0.5 : isRumaia ? rumaiaHeight * 0.5 : 1.55, 0);
+  rightWing.scale.set(isBoss ? finalBossWidth * 0.38 : isRumaia ? rumaiaWidth * 0.38 : 0.86, isBoss ? finalBossHeight * 0.86 : isRumaia ? rumaiaHeight * 0.72 : 1.28, isBoss ? 0.62 : isRumaia ? 0.36 : 0.22);
   group.add(rightWing);
 
   const spriteMaterial = new THREE.MeshBasicMaterial({
-    map: isBoss ? shared.bossSpriteTextures.idle : shared.enemySpriteTextures[0],
+    map: isBoss ? shared.bossSpriteTextures.idle : isRumaia ? shared.rumaiaSpriteTextures[0] : shared.enemySpriteTextures[0],
     transparent: true,
     alphaTest: 0.08,
     side: THREE.DoubleSide,
     depthWrite: false
   });
   const sprite = new THREE.Mesh(shared.geometries.plane, spriteMaterial);
-  sprite.position.copy(position).add(new THREE.Vector3(0, isBoss ? finalBossHeight * 0.5 : 1.62, 0));
-  sprite.scale.set(isBoss ? finalBossWidth : type === "commander" ? 4.15 : 3.72, isBoss ? finalBossHeight : type === "commander" ? 4.2 : 3.88, 1);
+  sprite.position.copy(position).add(new THREE.Vector3(0, spriteHeight * 0.5, 0));
+  sprite.scale.set(spriteWidth, spriteHeight, 1);
   sprite.castShadow = false;
   scene.add(sprite);
 
@@ -2130,8 +2292,10 @@ function createEnemy(type, position, seed) {
     health: config.health,
     alive: true,
     boss: isBoss,
-    eyeHeight: isBoss ? finalBossHeight * 0.72 : 1.55,
-    targetHeight: isBoss ? finalBossHeight * 0.48 : 1.22,
+    rumaia: isRumaia,
+    harmless: Boolean(config.harmless),
+    eyeHeight: isBoss ? finalBossHeight * 0.72 : isRumaia ? rumaiaHeight * 0.72 : 1.55,
+    targetHeight: isBoss ? finalBossHeight * 0.48 : isRumaia ? rumaiaHeight * 0.52 : 1.22,
     seed,
     state: "patrol",
     target: position.clone(),
@@ -2139,7 +2303,7 @@ function createEnemy(type, position, seed) {
     fireTimer: randomRange(seed, 0, config.fireRate),
     breathUntil: -10,
     decisionTimer: randomRange(seed + 4, 0.1, 0.8),
-    updateSkip: isBoss ? 0 : Math.floor(randomRange(seed + 9, 0, 4)),
+    updateSkip: isBoss || isRumaia ? 0 : Math.floor(randomRange(seed + 9, 0, 4)),
     stuckTimer: 0,
     aimYaw: randomRange(seed + 13, -Math.PI, Math.PI),
     cover: null,
@@ -4064,9 +4228,17 @@ function damageEnemy(enemy, damage, headshot = false, source = "rifle") {
     if (enemy.boss) {
       game.bossPhase = "defeated";
       game.bossDefeated = true;
-      game.objectiveMessage = "Korsak defeated. Opening victory video.";
-      addMessage("Korsak down. Victory video opening.");
-      scheduleVictoryRedirect();
+      game.objectiveMessage = `Korsak defeated. RUMAIA appears in ${rumaiaArrivalDelay} seconds.`;
+      addMessage(`Korsak down. RUMAIA appears in ${rumaiaArrivalDelay} seconds.`);
+      scheduleRumaiaArrival();
+      return;
+    }
+    if (enemy.rumaia) {
+      game.rumaiaPhase = "detonating";
+      game.rumaia = enemy;
+      game.objectiveMessage = "RUMAIA absorbed 200 damage. Nuclear bloom triggered.";
+      addMessage("RUMAIA took 200 damage. Nuclear bloom triggered.");
+      triggerNuclearExplosion(enemy.group.position.clone());
       return;
     }
     const label = source === "melee"
@@ -4106,6 +4278,131 @@ function startFinalBossSequence() {
   setBossCutsceneVisible(true);
   addMessage("All 100 hostiles down. Korsak is entering the battlespace.");
   playTone("objective");
+}
+
+function scheduleRumaiaArrival() {
+  if (game.rumaiaPhase !== "idle") return;
+  game.rumaiaPhase = "waiting";
+  game.rumaiaSpawnAt = game.time + rumaiaArrivalDelay;
+}
+
+function spawnRumaia() {
+  if (game.rumaiaSpawned) return;
+  game.rumaiaSpawned = true;
+  game.rumaiaPhase = "active";
+  game.hostilesAlive = 1;
+  game.totalHostiles += 1;
+  const rumaia = createEnemy("rumaia", new THREE.Vector3(-5, 0, -18), game.spawnSeed + 12001);
+  rumaia.state = "patrol";
+  rumaia.target.copy(rumaia.group.position);
+  rumaia.aimYaw = Math.PI;
+  game.rumaia = rumaia;
+  game.objectiveMessage = "RUMAIA is harmless. Deal 200 damage to trigger the final blast.";
+  addMessage("RUMAIA appeared. She will not attack, but 200 damage detonates the map.");
+  playTone("objective");
+}
+
+function setNukeFlashVisible(visible) {
+  if (!ui.nukeFlash) return;
+  if (visible) {
+    ui.nukeFlash.hidden = false;
+    ui.nukeFlash.classList.add("visible");
+    return;
+  }
+  ui.nukeFlash.classList.remove("visible");
+  window.setTimeout(() => {
+    if (!ui.nukeFlash.classList.contains("visible")) ui.nukeFlash.hidden = true;
+  }, 420);
+}
+
+function triggerNuclearExplosion(origin) {
+  if (game.nuke) return;
+  game.rumaiaPhase = "detonating";
+  game.nukeStartedAt = game.time;
+  game.nukeNextSmokeAt = game.time;
+  game.objectiveMessage = "RUMAIA nuclear bloom expanding. Stand by for extraction video.";
+  setNukeFlashVisible(true);
+  playTone("objective");
+
+  const group = new THREE.Group();
+  group.position.copy(origin);
+  scene.add(group);
+
+  const coreMaterial = new THREE.MeshBasicMaterial({
+    color: 0xfff0a4,
+    transparent: true,
+    opacity: 0.92,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending
+  });
+  const core = new THREE.Mesh(shared.geometries.sphere, coreMaterial);
+  core.scale.setScalar(0.4);
+  group.add(core);
+
+  const shockMaterial = new THREE.MeshBasicMaterial({
+    color: 0xff7a28,
+    transparent: true,
+    opacity: 0.34,
+    depthWrite: false,
+    wireframe: true
+  });
+  const shockwave = new THREE.Mesh(shared.geometries.sphere, shockMaterial);
+  shockwave.scale.setScalar(0.8);
+  group.add(shockwave);
+
+  const light = new THREE.PointLight(0xfff0a4, 9, 260, 1.15);
+  light.position.y = 8;
+  group.add(light);
+
+  game.nuke = { group, core, shockwave, light, origin: origin.clone() };
+}
+
+function updateRumaiaSequence(dt) {
+  if (game.rumaiaPhase === "waiting") {
+    const remaining = Math.max(0, Math.ceil(game.rumaiaSpawnAt - game.time));
+    game.objectiveMessage = `RUMAIA arrives in ${remaining}s. Reload and regroup.`;
+    if (game.time >= game.rumaiaSpawnAt) {
+      spawnRumaia();
+    }
+  }
+
+  if (game.rumaiaPhase !== "detonating" || !game.nuke) return;
+
+  const elapsed = game.time - game.nukeStartedAt;
+  const progress = clamp(elapsed / nuclearExplosionDuration, 0, 1);
+  const blast = smoothstep(0, 1, progress);
+  const flash = 1 - smoothstep(0.12, 1, progress);
+
+  game.nuke.core.scale.setScalar(5 + blast * 56);
+  game.nuke.core.material.opacity = 0.9 * flash;
+  game.nuke.shockwave.scale.setScalar(8 + blast * 158);
+  game.nuke.shockwave.material.opacity = 0.36 * (1 - progress);
+  game.nuke.shockwave.rotation.y += dt * 1.6;
+  game.nuke.light.intensity = 9 * flash;
+  renderer.toneMappingExposure = 1.05 + flash * 1.35;
+  scene.fog.density = 0.0085 + blast * 0.026;
+
+  if (game.time >= game.nukeNextSmokeAt) {
+    game.nukeNextSmokeAt = game.time + 0.18;
+    for (let i = 0; i < 3; i += 1) {
+      const angle = randomRange(game.time * 91 + i * 17, 0, Math.PI * 2);
+      const radius = randomRange(game.time * 113 + i * 19, 12, 72 + blast * 34);
+      addTemporarySmokeColumn(new THREE.Vector3(
+        game.nuke.origin.x + Math.cos(angle) * radius,
+        0,
+        game.nuke.origin.z + Math.sin(angle) * radius
+      ), 3, 5.5);
+    }
+  }
+
+  if (progress >= 1) {
+    game.rumaiaPhase = "done";
+    scene.remove(game.nuke.group);
+    game.nuke = null;
+    setNukeFlashVisible(false);
+    addMessage("Map engulfed. Opening victory video.");
+    scheduleVictoryRedirect();
+  }
 }
 
 function createBossPlane() {
@@ -4231,6 +4528,19 @@ function scheduleVictoryRedirect() {
 
 function collapseEnemy(enemy) {
   const yaw = enemy.group.rotation.y;
+  if (enemy.rumaia) {
+    enemy.group.position.y = 0.18;
+    enemy.group.rotation.set(Math.PI / 2, yaw, randomRange(enemy.seed, -0.25, 0.25));
+    enemy.group.scale.set(1.02, 0.94, 1.02);
+    enemy.spriteMaterial.map = shared.rumaiaSpriteTextures[0];
+    enemy.spriteMaterial.color.set(0xffc4ff);
+    enemy.spriteMaterial.opacity = 0.92;
+    enemy.spriteMaterial.needsUpdate = true;
+    enemy.sprite.position.copy(enemy.group.position).add(new THREE.Vector3(0, -0.12, 0));
+    enemy.sprite.rotation.set(-Math.PI / 2, 0, yaw + randomRange(enemy.seed + 3, -0.35, 0.35));
+    enemy.sprite.scale.set(rumaiaWidth * 1.25, rumaiaHeight * 0.62, 1);
+    return;
+  }
   if (enemy.boss) {
     enemy.group.position.y = 0.18;
     enemy.group.rotation.set(Math.PI / 2, yaw, randomRange(enemy.seed, -0.3, 0.3));
@@ -4272,6 +4582,21 @@ function enemySpriteIndex(enemy, view = camera) {
 
 function updateEnemyVisual(enemy, view = camera) {
   if (!enemy.alive) return;
+
+  if (enemy.rumaia) {
+    const index = enemySpriteIndex(enemy, view);
+    const nextMap = shared.rumaiaSpriteTextures[index] || shared.rumaiaSpriteTextures[0];
+    if (index !== enemy.currentSpriteIndex || enemy.spriteMaterial.map !== nextMap) {
+      enemy.currentSpriteIndex = index;
+      enemy.spriteMaterial.map = nextMap;
+      enemy.spriteMaterial.needsUpdate = true;
+    }
+    const bob = Math.sin(game.time * 2.4) * 0.05;
+    enemy.sprite.position.copy(enemy.group.position).add(new THREE.Vector3(0, rumaiaHeight * 0.5 + bob, 0));
+    enemy.sprite.lookAt(view.position.x, enemy.sprite.position.y, view.position.z);
+    enemy.sprite.scale.set(rumaiaWidth, rumaiaHeight, 1);
+    return;
+  }
 
   if (enemy.boss) {
     const attacking = game.time < enemy.breathUntil;
@@ -4693,6 +5018,12 @@ function updateEnemy(enemy, dt, index) {
 }
 
 function decideEnemyState(enemy, distance, seesPlayer) {
+  if (enemy.rumaia) {
+    enemy.state = "patrol";
+    enemy.target.copy(enemy.group.position);
+    return;
+  }
+
   if (!enemy.lastSeen && !seesPlayer) {
     enemy.state = "patrol";
     return;
@@ -4749,6 +5080,7 @@ function decideEnemyState(enemy, distance, seesPlayer) {
 }
 
 function enemyFire(enemy, distance) {
+  if (enemy.harmless) return;
   const target = nearestPlayerTarget(enemy.group.position);
   enemy.breathUntil = game.time + (enemy.boss ? 0.62 : 0.46);
   if (enemy.boss) {
@@ -4869,9 +5201,10 @@ function updateObjectives(input, dt) {
   let nearest = null;
   let nearestDistance = Infinity;
   const completedPrimary = objectives.filter((objective) => !objective.extraction && objective.complete).length;
+  const finalSequenceBlocksExtraction = game.bossPhase !== "idle" || game.rumaiaPhase !== "idle";
 
   for (const objective of objectives) {
-    if (objective.extraction && completedPrimary < 3 && game.hostilesAlive > 0) {
+    if (objective.extraction && (completedPrimary < 3 || game.hostilesAlive > 0 || finalSequenceBlocksExtraction)) {
       objective.column.visible = false;
       objective.ring.visible = false;
       continue;
@@ -4909,7 +5242,14 @@ function updateObjectives(input, dt) {
     }
   }
 
-  if (game.bossPhase === "cutscene") {
+  if (game.rumaiaPhase === "waiting") {
+    const remaining = Math.max(0, Math.ceil(game.rumaiaSpawnAt - game.time));
+    game.objectiveMessage = `RUMAIA arrives in ${remaining}s. Reload and regroup.`;
+  } else if (game.rumaiaPhase === "active") {
+    game.objectiveMessage = "RUMAIA is harmless. Deal 200 damage to trigger the final blast.";
+  } else if (game.rumaiaPhase === "detonating") {
+    game.objectiveMessage = "RUMAIA nuclear bloom expanding. Stand by for extraction video.";
+  } else if (game.bossPhase === "cutscene") {
     game.objectiveMessage = "Korsak inbound. Watch the commander-class cutscene.";
   } else if (game.bossPhase === "crash") {
     game.objectiveMessage = "Korsak is crash landing. Stay clear of the wreck.";
@@ -5152,14 +5492,39 @@ function handleControllerCalibrationAction(action) {
   updateControllerCalibrationUi();
 }
 
+function updateSplitGauges() {
+  for (const actor of players) {
+    const gauge = ui.splitGauges.get(actor.role);
+    if (!gauge) continue;
+    const active = !online.enabled && localSplit.enabled && isActorActive(actor);
+    gauge.panel.classList.toggle("inactive", !active);
+    gauge.health.style.width = `${clamp(actor.health, 0, 100)}%`;
+    gauge.armor.style.width = `${clamp(actor.armor, 0, 100)}%`;
+    gauge.stamina.style.width = `${clamp(actor.stamina, 0, 120) / 120 * 100}%`;
+    gauge.healthText.textContent = actor.downed ? "DOWN" : String(Math.round(actor.health));
+    gauge.armorText.textContent = String(Math.round(actor.armor));
+    gauge.staminaText.textContent = String(Math.round(actor.stamina));
+    gauge.ammo.textContent = String(actor.ammo);
+    gauge.reserve.textContent = actor.infiniteAmmo ? "INF" : String(actor.reserve);
+    gauge.weapon.textContent = activeWeaponConfig(actor).label.replace("-style Rifle", "").replace(" Sidearm", "");
+  }
+}
+
 function updateHUD() {
   if (game.time - game.lastHud < 0.05) return;
   game.lastHud = game.time;
   updateControllerLabels();
   updateControllerCalibrationUi();
   updateRewardMusicUi();
+  updateSplitGauges();
   ui.objective.textContent = game.revivePrompt || game.objectiveMessage;
-  ui.hostiles.textContent = `${game.hostilesAlive} left / ${activeEnemyCount()} live`;
+  if (game.rumaiaPhase === "waiting") {
+    ui.hostiles.textContent = `RUMAIA in ${Math.max(0, Math.ceil(game.rumaiaSpawnAt - game.time))}s`;
+  } else if (game.rumaiaPhase === "detonating") {
+    ui.hostiles.textContent = "NUCLEAR BLOOM";
+  } else {
+    ui.hostiles.textContent = `${game.hostilesAlive} left / ${activeEnemyCount()} live`;
+  }
   ui.health.style.width = `${clamp(player.health, 0, 100)}%`;
   ui.armor.style.width = `${clamp(player.armor, 0, 100)}%`;
   ui.stamina.style.width = `${clamp(player.stamina, 0, 100)}%`;
@@ -5634,6 +5999,7 @@ function animate() {
 
   if (game.running && !game.ended && !game.calibrationOpen) {
     updateFinalBossSequence(dt);
+    updateRumaiaSequence(dt);
     if (game.bossPhase !== "cutscene") {
       if (online.enabled) {
         const local = localBundle();

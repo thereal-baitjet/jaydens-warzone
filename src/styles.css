@@ -171,7 +171,8 @@ canvas {
 
 .split-crosshair,
 .split-divider,
-.split-info {
+.split-info,
+.split-gauge {
   display: none;
 }
 
@@ -296,6 +297,117 @@ canvas {
 .split-info p {
   margin: 0;
   line-height: 1.35;
+}
+
+.split-mode .split-gauge {
+  position: absolute;
+  z-index: 3;
+  display: grid;
+  width: min(22vw, 226px);
+  gap: 6px;
+  padding: 9px 10px;
+  border: 1px solid rgba(221, 214, 184, 0.22);
+  border-radius: 8px;
+  background: rgba(9, 13, 9, 0.66);
+  backdrop-filter: blur(8px);
+  pointer-events: none;
+}
+
+.split-gauge-p1 {
+  top: 44px;
+  left: 12px;
+}
+
+.split-gauge-p2 {
+  top: 44px;
+  left: calc(50vw + 12px);
+}
+
+.split-gauge-p3 {
+  top: calc(50vh + 44px);
+  left: 12px;
+}
+
+.split-gauge > strong {
+  color: #f2c46b;
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+}
+
+.split-meter {
+  display: grid;
+  grid-template-columns: 44px 1fr 34px;
+  align-items: center;
+  gap: 6px;
+  color: rgba(247, 244, 232, 0.88);
+  font-size: 9px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.split-meter i {
+  overflow: hidden;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.split-meter b {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: #86d680;
+  transition: width 140ms linear;
+}
+
+.split-meter b.armor {
+  background: #89b7ff;
+}
+
+.split-meter b.stamina {
+  background: #f2c46b;
+}
+
+.split-meter em {
+  overflow: hidden;
+  color: #f7f4e8;
+  font-style: normal;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.split-ammo {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 4px;
+  color: #f7f4e8;
+  font-weight: 950;
+}
+
+.split-ammo > span {
+  font-size: 24px;
+  line-height: 0.9;
+}
+
+.split-ammo small {
+  color: rgba(247, 244, 232, 0.72);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.split-ammo em {
+  margin-left: auto;
+  color: #f2c46b;
+  overflow: hidden;
+  font-size: 9px;
+  font-style: normal;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .session-label {
@@ -889,6 +1001,53 @@ canvas {
   color: rgba(247, 244, 232, 0.86);
   font-size: clamp(14px, 2vw, 18px);
   font-weight: 900;
+}
+
+.nuke-flash {
+  position: fixed;
+  inset: 0;
+  z-index: 41;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255, 248, 206, 0.98) 0 12%, rgba(255, 137, 45, 0.82) 28%, rgba(115, 35, 12, 0.66) 58%, rgba(0, 0, 0, 0.9) 100%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 260ms ease;
+}
+
+.nuke-flash[hidden] {
+  display: none;
+}
+
+.nuke-flash.visible {
+  opacity: 1;
+  animation: nukePulse 780ms ease-in-out infinite alternate;
+}
+
+.nuke-flash > div {
+  display: grid;
+  gap: 8px;
+  color: #1a0900;
+  text-align: center;
+  text-transform: uppercase;
+  text-shadow: 0 2px 18px rgba(255, 244, 205, 0.68);
+}
+
+.nuke-flash strong {
+  font-size: clamp(36px, 8vw, 86px);
+  font-weight: 950;
+  line-height: 0.9;
+}
+
+@keyframes nukePulse {
+  from {
+    filter: brightness(1) saturate(1.1);
+  }
+
+  to {
+    filter: brightness(1.45) saturate(1.45);
+  }
 }
 
 .room-panel {
