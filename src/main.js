@@ -1440,6 +1440,52 @@ function addGround() {
   }
 }
 
+function addMapBoundary() {
+  const halfSize = 112;
+  const wallThickness = 4;
+  const wallHeight = 4.2;
+  const wallLength = halfSize * 2 + wallThickness;
+  const wallY = wallHeight * 0.5;
+  const boundaryOptions = {
+    label: "map boundary wall",
+    cover: false,
+    type: "boundary"
+  };
+
+  addSolidBox(new THREE.Vector3(0, wallY, -halfSize), new THREE.Vector3(wallLength, wallHeight, wallThickness), shared.materials.concreteDark, boundaryOptions);
+  addSolidBox(new THREE.Vector3(0, wallY, halfSize), new THREE.Vector3(wallLength, wallHeight, wallThickness), shared.materials.concreteDark, boundaryOptions);
+  addSolidBox(new THREE.Vector3(-halfSize, wallY, 0), new THREE.Vector3(wallThickness, wallHeight, wallLength), shared.materials.concreteDark, boundaryOptions);
+  addSolidBox(new THREE.Vector3(halfSize, wallY, 0), new THREE.Vector3(wallThickness, wallHeight, wallLength), shared.materials.concreteDark, boundaryOptions);
+
+  for (let i = -5; i <= 5; i += 1) {
+    const offset = i * 18;
+    addSolidBox(new THREE.Vector3(offset, 1.15, -halfSize + 2.24), new THREE.Vector3(6.4, 0.42, 0.16), shared.materials.warning, {
+      label: "boundary warning stripe",
+      solid: false,
+      castShadow: false,
+      receiveShadow: false
+    });
+    addSolidBox(new THREE.Vector3(offset, 1.15, halfSize - 2.24), new THREE.Vector3(6.4, 0.42, 0.16), shared.materials.warning, {
+      label: "boundary warning stripe",
+      solid: false,
+      castShadow: false,
+      receiveShadow: false
+    });
+    addSolidBox(new THREE.Vector3(-halfSize + 2.24, 1.15, offset), new THREE.Vector3(0.16, 0.42, 6.4), shared.materials.warning, {
+      label: "boundary warning stripe",
+      solid: false,
+      castShadow: false,
+      receiveShadow: false
+    });
+    addSolidBox(new THREE.Vector3(halfSize - 2.24, 1.15, offset), new THREE.Vector3(0.16, 0.42, 6.4), shared.materials.warning, {
+      label: "boundary warning stripe",
+      solid: false,
+      castShadow: false,
+      receiveShadow: false
+    });
+  }
+}
+
 function addBarricade(x, z, rotation = 0) {
   const group = new THREE.Group();
   group.position.set(x, 0, z);
@@ -1815,6 +1861,7 @@ function addRewardBoxes() {
 
 function buildBattlefield() {
   addGround();
+  addMapBoundary();
   addStartingCover();
 
   addBarricade(2, 42, 0.15);
