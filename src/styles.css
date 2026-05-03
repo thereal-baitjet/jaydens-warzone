@@ -830,6 +830,67 @@ canvas {
   outline: 0;
 }
 
+.boss-cutscene {
+  position: fixed;
+  inset: 0;
+  z-index: 39;
+  overflow: hidden;
+  background: #020406;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 420ms ease;
+}
+
+.boss-cutscene[hidden] {
+  display: none;
+}
+
+.boss-cutscene.visible {
+  opacity: 1;
+}
+
+.boss-cutscene-art {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: saturate(1.08) contrast(1.08);
+}
+
+.boss-cutscene::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  box-shadow: inset 0 11vh 0 rgba(0, 0, 0, 0.76), inset 0 -12vh 0 rgba(0, 0, 0, 0.78);
+  pointer-events: none;
+}
+
+.boss-cutscene-panel {
+  position: absolute;
+  left: 22px;
+  right: 22px;
+  bottom: 22px;
+  z-index: 1;
+  display: grid;
+  gap: 4px;
+  max-width: 520px;
+  color: #f7f4e8;
+  text-shadow: 0 3px 20px rgba(0, 0, 0, 0.9);
+}
+
+.boss-cutscene-panel strong {
+  font-size: clamp(28px, 5vw, 58px);
+  font-weight: 950;
+  line-height: 0.95;
+  text-transform: uppercase;
+}
+
+.boss-cutscene-panel p {
+  margin: 0;
+  color: rgba(247, 244, 232, 0.86);
+  font-size: clamp(14px, 2vw, 18px);
+  font-weight: 900;
+}
+
 .room-panel {
   display: grid;
   gap: 10px;

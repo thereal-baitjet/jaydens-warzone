@@ -47,10 +47,16 @@ const introVideoSrc = "/assets/jaydens-warzone-intro.mp4";
 const introMaxDuration = 150;
 const dragonSpriteSheetSrc = "/assets/enemy-dragon-detail-sheet.png";
 const fireballSpriteSheetSrc = "/assets/fireball-sheet.png";
+const finalBossSpriteSheetSrc = "/assets/final-boss-sheet.png";
+const finalBossCutsceneSrc = "/assets/final-boss-cutscene.png";
 const fireballGravity = 3.8;
 const fireballBaseSpeed = 21;
 const fireballRadius = 0.55;
 const fireballLifetime = 4.2;
+const finalBossHeight = 11.65;
+const finalBossWidth = 6.35;
+const finalBossIntroDuration = 4.8;
+const finalBossCrashDuration = 3.3;
 const rewardBoxPositions = [
   [0, 1.0, 68],
   [-8, 1.0, 38],
@@ -359,6 +365,14 @@ app.innerHTML = `
         </div>
         <button class="intro-skip" data-ui="introSkip" type="button">Skip</button>
       </div>
+      <div class="boss-cutscene" data-ui="bossCutscene" hidden>
+        <img class="boss-cutscene-art" src="${finalBossCutsceneSrc}" alt="" />
+        <div class="boss-cutscene-panel">
+          <span class="eyebrow">Final Boss</span>
+          <strong>Korsak Inbound</strong>
+          <p>Commander-class contact. Plane impact imminent.</p>
+        </div>
+      </div>
       <div class="calibration-panel" data-ui="calibration">
         <div class="calibration-card">
           <div class="calibration-header">
@@ -449,6 +463,7 @@ const ui = {
   introCinematic: document.querySelector('[data-ui="introCinematic"]'),
   introVideo: document.querySelector('[data-ui="introVideo"]'),
   introSkip: document.querySelector('[data-ui="introSkip"]'),
+  bossCutscene: document.querySelector('[data-ui="bossCutscene"]'),
   reset: document.querySelector('[data-ui="reset"]'),
   restart: document.querySelector('[data-ui="restart"]'),
   calibrationOpen: document.querySelector('[data-ui="calibrationOpen"]'),
@@ -763,6 +778,12 @@ const game = {
   objectiveMessage: "Disable systems, recover intel, extract, and hunt song boxes.",
   revivePrompt: "",
   victoryRedirectScheduled: false,
+  bossPhase: "idle",
+  bossIntroUntil: 0,
+  bossCrashStartedAt: 0,
+  bossSpawned: false,
+  bossDefeated: false,
+  bossPlane: null,
   messages: []
 };
 const introState = {
@@ -944,6 +965,59 @@ const fireballCells = {
   projectile: { x: 858, y: 158, w: 190, h: 128 },
   impact: { x: 28, y: 548, w: 210, h: 118 }
 };
+
+const bossSpriteCells = {
+  idle: { x: 20, y: 32, w: 286, h: 552 },
+  aim: { x: 350, y: 58, w: 300, h: 236 },
+  fire: { x: 670, y: 58, w: 336, h: 220 },
+  crouch: { x: 382, y: 342, w: 266, h: 292 },
+  run: { x: 740, y: 324, w: 270, h: 396 },
+  hit: { x: 48, y: 614, w: 286, h: 342 },
+  taunt: { x: 392, y: 636, w: 214, h: 312 },
+  down: { x: 616, y: 738, w: 404, h: 252 }
+};
+
+function drawContainedCell(ctx, image, cell, maxWidth = 468, maxHeight = 492, yBias = 0) {
+  const scale = Math.min(maxWidth / cell.w, maxHeight / cell.h);
+  const width = cell.w * scale;
+  const height = cell.h * scale;
+  const x = (512 - width) * 0.5;
+  const y = (512 - height) * 0.5 + yBias;
+  ctx.drawImage(image, cell.x, cell.y, cell.w, cell.h, x, y, width, height);
+}
+
+function createBossSpriteTexture(pose = "idle") {
+  const cell = bossSpriteCells[pose] || bossSpriteCells.idle;
+  const canvas = document.createElement("canvas");
+  canvas.width = 512;
+  canvas.height = 512;
+  const ctx = canvas.getContext("2d");
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const gradient = ctx.createLinearGradient(0, 60, 0, 452);
+  gradient.addColorStop(0, "rgba(75, 110, 150, 0.85)");
+  gradient.addColorStop(0.52, "rgba(24, 46, 78, 0.78)");
+  gradient.addColorStop(1, "rgba(10, 14, 18, 0.9)");
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.ellipse(256, 270, 96, 196, 0, 0, Math.PI * 2);
+  ctx.fill();
+  texture.needsUpdate = true;
+
+  const image = new Image();
+  image.onload = () => {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    drawContainedCell(ctx, image, cell, pose === "down" ? 500 : 468, pose === "down" ? 330 : 492, pose === "down" ? 72 : 0);
+    removeConnectedSheetBackground(ctx, canvas.width, canvas.height);
+    removeConnectedGreyBackground(ctx, canvas.width, canvas.height);
+    trimAlphaToCenter(ctx, canvas.width, canvas.height, pose === "down" ? 22 : 8);
+    texture.needsUpdate = true;
+  };
+  image.src = finalBossSpriteSheetSrc;
+  return texture;
+}
 
 function createDragonSpriteTexture(cellIndex) {
   const cell = dragonSpriteCells[cellIndex] || dragonSpriteCells[0];
@@ -1216,6 +1290,8 @@ function createSharedAssets() {
     enemyMarksman: new THREE.MeshStandardMaterial({ color: 0x3c4b53, roughness: 0.74 }),
     enemySupport: new THREE.MeshStandardMaterial({ color: 0x725f35, roughness: 0.74 }),
     enemyCommander: new THREE.MeshStandardMaterial({ color: 0x7b2f2f, roughness: 0.68 }),
+    bossPlane: new THREE.MeshStandardMaterial({ color: 0x1c2b36, roughness: 0.58, metalness: 0.32 }),
+    bossLaser: new THREE.MeshBasicMaterial({ color: 0x5ae7ff, transparent: true, opacity: 0.9 }),
     enemyHitbox: new THREE.MeshBasicMaterial({
       transparent: true,
       opacity: 0,
@@ -1263,6 +1339,9 @@ function createSharedAssets() {
 
   shared.enemySpriteTextures = Array.from({ length: 8 }, (_, index) => createDragonSpriteTexture(index));
   shared.enemyAttackTexture = createDragonAttackTexture();
+  shared.bossSpriteTextures = Object.fromEntries(
+    Object.keys(bossSpriteCells).map((pose) => [pose, createBossSpriteTexture(pose)])
+  );
   shared.fireballTexture = createFireballSpriteTexture("projectile");
   shared.fireballImpactTexture = createFireballSpriteTexture("impact");
   shared.playerSpriteTextures = playerSpriteSources.map((_, playerIndex) => (
@@ -1923,49 +2002,62 @@ function createEnemy(type, position, seed) {
       damage: 8,
       fireballSpeed: 22,
       material: shared.materials.enemyCommander
+    },
+    finalBoss: {
+      health: 1200,
+      speed: 2.85,
+      fireRate: 0.7,
+      range: 86,
+      accuracy: 0.36,
+      damage: 16,
+      material: shared.materials.enemyCommander,
+      boss: true
     }
   }[type];
 
+  const isBoss = Boolean(config.boss);
   const group = new THREE.Group();
   group.position.copy(position);
   scene.add(group);
 
-  const body = new THREE.Mesh(shared.geometries.soldierBody, shared.materials.enemyHitbox);
-  body.position.y = 1.0;
+  const body = new THREE.Mesh(isBoss ? shared.geometries.box : shared.geometries.soldierBody, shared.materials.enemyHitbox);
+  body.position.y = isBoss ? finalBossHeight * 0.5 : 1.0;
+  if (isBoss) body.scale.set(finalBossWidth * 0.82, finalBossHeight * 0.9, 0.72);
   body.castShadow = false;
   group.add(body);
 
   const head = new THREE.Mesh(shared.geometries.soldierHead, shared.materials.enemyHitbox);
-  head.position.y = 1.72;
+  head.position.y = isBoss ? finalBossHeight * 0.82 : 1.72;
+  if (isBoss) head.scale.setScalar(4.2);
   head.castShadow = false;
   group.add(head);
 
   const helmet = new THREE.Mesh(shared.geometries.soldierHead, shared.materials.enemyHitbox);
-  helmet.position.y = 1.83;
-  helmet.scale.set(1.08, 0.56, 1.08);
+  helmet.position.y = isBoss ? finalBossHeight * 0.88 : 1.83;
+  helmet.scale.set(isBoss ? 4.55 : 1.08, isBoss ? 2.1 : 0.56, isBoss ? 4.55 : 1.08);
   helmet.castShadow = false;
   group.add(helmet);
 
   const leftWing = new THREE.Mesh(shared.geometries.box, shared.materials.enemyHitbox);
-  leftWing.position.set(-0.72, 1.55, 0);
-  leftWing.scale.set(0.86, 1.28, 0.22);
+  leftWing.position.set(isBoss ? -finalBossWidth * 0.33 : -0.72, isBoss ? finalBossHeight * 0.5 : 1.55, 0);
+  leftWing.scale.set(isBoss ? finalBossWidth * 0.38 : 0.86, isBoss ? finalBossHeight * 0.86 : 1.28, isBoss ? 0.62 : 0.22);
   group.add(leftWing);
 
   const rightWing = new THREE.Mesh(shared.geometries.box, shared.materials.enemyHitbox);
-  rightWing.position.set(0.72, 1.55, 0);
-  rightWing.scale.set(0.86, 1.28, 0.22);
+  rightWing.position.set(isBoss ? finalBossWidth * 0.33 : 0.72, isBoss ? finalBossHeight * 0.5 : 1.55, 0);
+  rightWing.scale.set(isBoss ? finalBossWidth * 0.38 : 0.86, isBoss ? finalBossHeight * 0.86 : 1.28, isBoss ? 0.62 : 0.22);
   group.add(rightWing);
 
   const spriteMaterial = new THREE.MeshBasicMaterial({
-    map: shared.enemySpriteTextures[0],
+    map: isBoss ? shared.bossSpriteTextures.idle : shared.enemySpriteTextures[0],
     transparent: true,
     alphaTest: 0.08,
     side: THREE.DoubleSide,
     depthWrite: false
   });
   const sprite = new THREE.Mesh(shared.geometries.plane, spriteMaterial);
-  sprite.position.copy(position).add(new THREE.Vector3(0, 1.62, 0));
-  sprite.scale.set(type === "commander" ? 4.15 : 3.72, type === "commander" ? 4.2 : 3.88, 1);
+  sprite.position.copy(position).add(new THREE.Vector3(0, isBoss ? finalBossHeight * 0.5 : 1.62, 0));
+  sprite.scale.set(isBoss ? finalBossWidth : type === "commander" ? 4.15 : 3.72, isBoss ? finalBossHeight : type === "commander" ? 4.2 : 3.88, 1);
   sprite.castShadow = false;
   scene.add(sprite);
 
@@ -1990,6 +2082,9 @@ function createEnemy(type, position, seed) {
     currentSpriteIndex: 0,
     health: config.health,
     alive: true,
+    boss: isBoss,
+    eyeHeight: isBoss ? finalBossHeight * 0.72 : 1.55,
+    targetHeight: isBoss ? finalBossHeight * 0.48 : 1.22,
     seed,
     state: "patrol",
     target: position.clone(),
@@ -1997,7 +2092,7 @@ function createEnemy(type, position, seed) {
     fireTimer: randomRange(seed, 0, config.fireRate),
     breathUntil: -10,
     decisionTimer: randomRange(seed + 4, 0.1, 0.8),
-    updateSkip: Math.floor(randomRange(seed + 9, 0, 4)),
+    updateSkip: isBoss ? 0 : Math.floor(randomRange(seed + 9, 0, 4)),
     stuckTimer: 0,
     aimYaw: randomRange(seed + 13, -Math.PI, Math.PI),
     cover: null,
@@ -2233,6 +2328,7 @@ function nearestPlayerTarget(position) {
 
 function updateSpawnDirector() {
   if (!game.running || spawnQueue.length === 0) return;
+  if (game.bossPhase !== "idle") return;
 
   const completedPrimary = objectives.filter((objective) => !objective.extraction && objective.complete).length;
   const active = activeEnemyCount();
@@ -2279,7 +2375,7 @@ function moveWithCollisions(position, delta, radius = 0.42) {
 
 function enemyMoveWithCollisions(enemy, velocity, dt) {
   const previous = enemy.group.position.clone();
-  moveWithCollisions(enemy.group.position, velocity.clone().multiplyScalar(dt), 0.38);
+  moveWithCollisions(enemy.group.position, velocity.clone().multiplyScalar(dt), enemy.boss ? 1.25 : 0.38);
   const moved = enemy.group.position.distanceToSquared(previous);
   if (moved < 0.0003) {
     enemy.stuckTimer += dt;
@@ -3630,10 +3726,11 @@ function findGunMeleeTarget(range = 3.85) {
   let bestScore = -Infinity;
   for (const enemy of enemies) {
     if (!enemy.alive) continue;
-    const point = enemy.group.position.clone().add(new THREE.Vector3(0, 1.22, 0));
+    const point = enemy.group.position.clone().add(new THREE.Vector3(0, enemy.targetHeight || 1.22, 0));
     const toEnemy = point.clone().sub(origin);
     const distance = toEnemy.length();
-    if (distance > range) continue;
+    const effectiveRange = enemy.boss ? range + 2.4 : range;
+    if (distance > effectiveRange) continue;
 
     const direction = toEnemy.clone().normalize();
     const aimDot = direction.dot(forward);
@@ -3917,6 +4014,14 @@ function damageEnemy(enemy, damage, headshot = false, source = "rifle") {
     player.kills += 1;
     collapseEnemy(enemy);
     playTone("kill");
+    if (enemy.boss) {
+      game.bossPhase = "defeated";
+      game.bossDefeated = true;
+      game.objectiveMessage = "Korsak defeated. Opening victory video.";
+      addMessage("Korsak down. Victory video opening.");
+      scheduleVictoryRedirect();
+      return;
+    }
     const label = source === "melee"
       ? "Critical melee takedown"
       : source === "frag"
@@ -3926,11 +4031,143 @@ function damageEnemy(enemy, damage, headshot = false, source = "rifle") {
           : "Hostile neutralized";
     addMessage(`${label} - ${game.hostilesAlive} remaining.`);
     if (game.hostilesAlive === 0) {
-      addMessage("All hostile forces defeated. Opening victory video.");
-      scheduleVictoryRedirect();
+      startFinalBossSequence();
     }
   } else {
     playTone("hit");
+  }
+}
+
+function setBossCutsceneVisible(visible) {
+  if (!ui.bossCutscene) return;
+  if (visible) {
+    ui.bossCutscene.hidden = false;
+    ui.bossCutscene.classList.add("visible");
+    return;
+  }
+  ui.bossCutscene.classList.remove("visible");
+  window.setTimeout(() => {
+    if (!ui.bossCutscene.classList.contains("visible")) ui.bossCutscene.hidden = true;
+  }, 420);
+}
+
+function startFinalBossSequence() {
+  if (game.bossPhase !== "idle" || game.bossSpawned || game.bossDefeated) return;
+  game.bossPhase = "cutscene";
+  game.bossIntroUntil = game.time + finalBossIntroDuration;
+  game.objectiveMessage = "Korsak inbound. Commander-class final boss detected.";
+  setBossCutsceneVisible(true);
+  addMessage("All 100 hostiles down. Korsak is entering the battlespace.");
+  playTone("objective");
+}
+
+function createBossPlane() {
+  const group = new THREE.Group();
+
+  const fuselage = new THREE.Mesh(shared.geometries.box, shared.materials.bossPlane);
+  fuselage.scale.set(5.8, 1.05, 1.22);
+  group.add(fuselage);
+
+  const nose = new THREE.Mesh(shared.geometries.cone, shared.materials.metalDark);
+  nose.rotation.z = -Math.PI / 2;
+  nose.position.x = 3.4;
+  nose.scale.set(0.86, 1.45, 0.86);
+  group.add(nose);
+
+  const wing = new THREE.Mesh(shared.geometries.box, shared.materials.metalGreen);
+  wing.scale.set(2.1, 0.14, 8.5);
+  wing.position.x = -0.35;
+  group.add(wing);
+
+  const tail = new THREE.Mesh(shared.geometries.box, shared.materials.metalDark);
+  tail.scale.set(1.0, 1.6, 0.18);
+  tail.position.set(-3.1, 0.98, 0);
+  group.add(tail);
+
+  const engineA = new THREE.Mesh(shared.geometries.cylinder, shared.materials.black);
+  engineA.rotation.z = Math.PI / 2;
+  engineA.position.set(0.55, -0.42, -2.9);
+  engineA.scale.set(0.34, 0.9, 0.34);
+  group.add(engineA);
+
+  const engineB = engineA.clone();
+  engineB.position.z = 2.9;
+  group.add(engineB);
+
+  const glow = new THREE.PointLight(0xff8a28, 2.4, 18, 2);
+  glow.position.set(-3.4, 0, 0);
+  group.add(glow);
+
+  group.userData.from = new THREE.Vector3(-86, 23, -78);
+  group.userData.to = new THREE.Vector3(-12, 0.78, -30);
+  group.userData.nextSmokeAt = 0;
+  group.position.copy(group.userData.from);
+  group.rotation.set(-0.1, -0.76, 0.18);
+  scene.add(group);
+  return group;
+}
+
+function beginBossCrash() {
+  if (game.bossPhase !== "cutscene") return;
+  setBossCutsceneVisible(false);
+  game.bossPhase = "crash";
+  game.bossCrashStartedAt = game.time;
+  game.bossPlane = createBossPlane();
+  game.objectiveMessage = "Korsak crash landing. Keep distance from impact.";
+  addMessage("Incoming aircraft. Korsak is crash landing near the depot.");
+  playTone("objective");
+}
+
+function spawnFinalBoss() {
+  if (game.bossSpawned) return;
+  game.bossSpawned = true;
+  game.bossPhase = "fight";
+  game.hostilesAlive = 1;
+  game.totalHostiles += 1;
+  const boss = createEnemy("finalBoss", new THREE.Vector3(-12, 0, -30), game.spawnSeed + 9001);
+  boss.state = "advance";
+  boss.lastSeen = nearestPlayerTarget(boss.group.position).actor.feet.clone();
+  boss.fireTimer = 1.05;
+  boss.aimYaw = Math.PI;
+  game.objectiveMessage = "Final boss: Korsak. Break line of sight and shoot the full sprite.";
+  addMessage("Korsak has exited the wreck. Final boss active.");
+  playTone("objective");
+}
+
+function updateFinalBossSequence(dt) {
+  if (game.bossPhase === "cutscene" && game.time >= game.bossIntroUntil) {
+    beginBossCrash();
+  }
+
+  if (game.bossPhase !== "crash" || !game.bossPlane) return;
+
+  const elapsed = game.time - game.bossCrashStartedAt;
+  const progress = clamp(elapsed / finalBossCrashDuration, 0, 1);
+  const eased = 1 - (1 - progress) ** 2.2;
+  const from = game.bossPlane.userData.from;
+  const to = game.bossPlane.userData.to;
+  game.bossPlane.position.lerpVectors(from, to, eased);
+  game.bossPlane.position.y += Math.sin(progress * Math.PI) * 2.8;
+  game.bossPlane.rotation.y = -0.76 + progress * 0.72;
+  game.bossPlane.rotation.z = 0.18 - progress * 0.64;
+  game.bossPlane.rotation.x = -0.1 - progress * 0.48;
+
+  if (game.time >= game.bossPlane.userData.nextSmokeAt) {
+    game.bossPlane.userData.nextSmokeAt = game.time + 0.18;
+    const smoke = new THREE.Mesh(shared.geometries.sphere, shared.materials.smoke.clone());
+    smoke.position.copy(game.bossPlane.position).add(new THREE.Vector3(randomRange(elapsed * 31, -1.8, 1.8), -0.2, randomRange(elapsed * 47, -1.8, 1.8)));
+    smoke.scale.set(1.4, 0.72, 1.4);
+    scene.add(smoke);
+    particles.push({ mesh: smoke, type: "smoke", age: 0, life: 2.2, baseY: smoke.position.y });
+  }
+
+  if (progress >= 1) {
+    const impact = game.bossPlane.userData.to.clone();
+    scene.remove(game.bossPlane);
+    game.bossPlane = null;
+    spawnImpact(impact.clone().add(new THREE.Vector3(0, 0.45, 0)));
+    addTemporarySmokeColumn(impact, 18, 10.5);
+    spawnFinalBoss();
   }
 }
 
@@ -3947,6 +4184,19 @@ function scheduleVictoryRedirect() {
 
 function collapseEnemy(enemy) {
   const yaw = enemy.group.rotation.y;
+  if (enemy.boss) {
+    enemy.group.position.y = 0.18;
+    enemy.group.rotation.set(Math.PI / 2, yaw, randomRange(enemy.seed, -0.3, 0.3));
+    enemy.group.scale.set(1.04, 0.92, 1.04);
+    enemy.spriteMaterial.map = shared.bossSpriteTextures.down;
+    enemy.spriteMaterial.color.set(0x7286a0);
+    enemy.spriteMaterial.opacity = 0.88;
+    enemy.spriteMaterial.needsUpdate = true;
+    enemy.sprite.position.copy(enemy.group.position).add(new THREE.Vector3(0, -0.12, 0));
+    enemy.sprite.rotation.set(-Math.PI / 2, 0, yaw + randomRange(enemy.seed + 3, -0.35, 0.35));
+    enemy.sprite.scale.set(finalBossWidth * 1.55, finalBossHeight * 0.42, 1);
+    return;
+  }
   enemy.group.position.y = 0.22;
   enemy.group.rotation.set(Math.PI / 2, yaw, randomRange(enemy.seed, -0.45, 0.45));
   enemy.group.scale.set(1.05, 0.92, 1.05);
@@ -3975,6 +4225,23 @@ function enemySpriteIndex(enemy, view = camera) {
 
 function updateEnemyVisual(enemy, view = camera) {
   if (!enemy.alive) return;
+
+  if (enemy.boss) {
+    const attacking = game.time < enemy.breathUntil;
+    const moving = enemy.state === "advance" || enemy.state === "flank" || enemy.state === "retreat";
+    const nextPose = attacking ? "fire" : moving ? "run" : enemy.health < enemy.config.health * 0.38 ? "hit" : "idle";
+    const nextMap = shared.bossSpriteTextures[nextPose] || shared.bossSpriteTextures.idle;
+    if (enemy.currentSpriteIndex !== nextPose || enemy.spriteMaterial.map !== nextMap) {
+      enemy.currentSpriteIndex = nextPose;
+      enemy.spriteMaterial.map = nextMap;
+      enemy.spriteMaterial.needsUpdate = true;
+    }
+    const scalePulse = attacking ? 1 + Math.sin(game.time * 28) * 0.025 : 1;
+    enemy.sprite.position.copy(enemy.group.position).add(new THREE.Vector3(0, finalBossHeight * 0.5 + (attacking ? 0.16 : 0), 0));
+    enemy.sprite.lookAt(view.position.x, enemy.sprite.position.y, view.position.z);
+    enemy.sprite.scale.set(finalBossWidth * scalePulse, finalBossHeight * scalePulse, 1);
+    return;
+  }
 
   const index = enemySpriteIndex(enemy, view);
   const attacking = game.time < enemy.breathUntil;
@@ -4159,6 +4426,54 @@ function spawnEnemyFireball(enemy, target, distance) {
   });
 }
 
+function spawnLaserImpact(point) {
+  const material = shared.materials.bossLaser.clone();
+  material.opacity = 0.86;
+  material.depthWrite = false;
+  const mesh = new THREE.Mesh(shared.geometries.sphere, material);
+  mesh.position.copy(point);
+  mesh.scale.setScalar(0.16);
+  scene.add(mesh);
+  particles.push({ mesh, type: "impact", age: 0, life: 0.24 });
+}
+
+function spawnBossLaser(enemy, target, distance) {
+  const forward = new THREE.Vector3(Math.sin(enemy.aimYaw), 0, Math.cos(enemy.aimYaw));
+  const start = enemy.group.position.clone()
+    .addScaledVector(forward, 1.28)
+    .add(new THREE.Vector3(0, finalBossHeight * 0.56, 0));
+  const aimPoint = target.actor.feet.clone().add(new THREE.Vector3(0, target.actor.height * 0.68, 0));
+  const jammerPenalty = game.time < target.actor.jammerUntil ? 1.8 : 1;
+  const missRadius = clamp((1 - enemy.config.accuracy) * distance * 0.018 * jammerPenalty, 0.08, 1.5);
+  const seed = enemy.seed + Math.floor(game.time * 1361);
+  aimPoint.x += randomRange(seed + 1, -missRadius, missRadius);
+  aimPoint.y += randomRange(seed + 2, -missRadius * 0.24, missRadius * 0.4);
+  aimPoint.z += randomRange(seed + 3, -missRadius, missRadius);
+
+  const direction = aimPoint.clone().sub(start).normalize();
+  raycaster.set(start, direction);
+  raycaster.far = enemy.config.range;
+  const solidHit = raycaster.intersectObjects(solidMeshes, false)[0];
+  raycaster.far = 160;
+  const endpoint = solidHit ? solidHit.point.clone() : start.clone().addScaledVector(direction, enemy.config.range);
+  spawnTracer(start, endpoint, 0x5ae7ff);
+  spawnLaserImpact(endpoint);
+
+  const hitActor = activePlayers().find((actor) => {
+    if (actor.downed) return false;
+    const center = actor.feet.clone().add(new THREE.Vector3(0, actor.height * 0.58, 0));
+    return distancePointToSegmentSquared(center, start, endpoint) < 0.58 ** 2;
+  });
+  if (!hitActor) return;
+
+  setActivePlayer(hitActor, cameraForRole(hitActor.role), padForLocalActor(hitActor));
+  damagePlayer(enemy.config.damage);
+  if (game.time - (enemy.lastLaserMessageAt || -10) > 1.8) {
+    enemy.lastLaserMessageAt = game.time;
+    addMessage("Korsak laser hit. Use cover to break the beam.");
+  }
+}
+
 function updateFireballs(dt) {
   const local = localBundle();
   for (let i = fireballs.length - 1; i >= 0; i -= 1) {
@@ -4251,7 +4566,7 @@ function chooseNearestCover(origin, avoidPlayer = true) {
 function enemyCanSeePlayer(enemy, distance) {
   if (distance > enemy.config.range * 1.25 && game.time - player.lastShotAt > 1.4) return false;
 
-  const enemyEye = enemy.group.position.clone().add(new THREE.Vector3(0, 1.55, 0));
+  const enemyEye = enemy.group.position.clone().add(new THREE.Vector3(0, enemy.eyeHeight || 1.55, 0));
   const playerEye = camera.position.clone();
   const dir = playerEye.clone().sub(enemyEye);
   const length = dir.length();
@@ -4347,6 +4662,17 @@ function decideEnemyState(enemy, distance, seesPlayer) {
     return;
   }
 
+  if (enemy.boss) {
+    if (distance > 46) {
+      enemy.state = "advance";
+    } else {
+      const roll = seededRandom(enemy.seed + Math.floor(game.time * 4));
+      enemy.state = roll > 0.7 ? "flank" : roll > 0.38 ? "take_cover" : "advance";
+      enemy.cover = chooseNearestCover(enemy.group.position, false);
+    }
+    return;
+  }
+
   if (enemy.type === "breacher") {
     enemy.state = distance > 10 ? "advance" : "take_cover";
     enemy.cover = chooseNearestCover(enemy.group.position, false);
@@ -4377,8 +4703,12 @@ function decideEnemyState(enemy, distance, seesPlayer) {
 
 function enemyFire(enemy, distance) {
   const target = nearestPlayerTarget(enemy.group.position);
-  enemy.breathUntil = game.time + 0.46;
-  spawnEnemyFireball(enemy, target, distance);
+  enemy.breathUntil = game.time + (enemy.boss ? 0.62 : 0.46);
+  if (enemy.boss) {
+    spawnBossLaser(enemy, target, distance);
+  } else {
+    spawnEnemyFireball(enemy, target, distance);
+  }
   playTone("enemyShot");
 }
 
@@ -4532,7 +4862,13 @@ function updateObjectives(input, dt) {
     }
   }
 
-  if (game.hostilesAlive === 0 && !objectives[3].complete) {
+  if (game.bossPhase === "cutscene") {
+    game.objectiveMessage = "Korsak inbound. Watch the commander-class cutscene.";
+  } else if (game.bossPhase === "crash") {
+    game.objectiveMessage = "Korsak is crash landing. Stay clear of the wreck.";
+  } else if (game.bossPhase === "fight") {
+    game.objectiveMessage = "Final boss: Korsak. Shoot the full 3x-tall sprite.";
+  } else if (game.hostilesAlive === 0 && !objectives[3].complete) {
     game.objectiveMessage = "All hostiles neutralized. Move to extraction.";
   } else if (player.activeObjective && !player.activeObjective.complete) {
     const percent = Math.floor((player.activeObjective.progress / player.activeObjective.holdTime) * 100);
@@ -5250,19 +5586,22 @@ function animate() {
   updateOnlineRoom(dt);
 
   if (game.running && !game.ended && !game.calibrationOpen) {
-    if (online.enabled) {
-      const local = localBundle();
-      updatePlayer(local.actor, local.view, getInputState({ keyboardMouse: false, pad: controlPadOne }), controlPadOne, dt);
-    } else if (localSplit.enabled) {
-      for (const bundle of localSplitBundles()) {
-        updatePlayer(bundle.actor, bundle.view, getInputState({ keyboardMouse: false, pad: bundle.pad }), bundle.pad, dt);
+    updateFinalBossSequence(dt);
+    if (game.bossPhase !== "cutscene") {
+      if (online.enabled) {
+        const local = localBundle();
+        updatePlayer(local.actor, local.view, getInputState({ keyboardMouse: false, pad: controlPadOne }), controlPadOne, dt);
+      } else if (localSplit.enabled) {
+        for (const bundle of localSplitBundles()) {
+          updatePlayer(bundle.actor, bundle.view, getInputState({ keyboardMouse: false, pad: bundle.pad }), bundle.pad, dt);
+        }
+      } else {
+        updatePlayer(playerOne, cameraOne, getInputState({ keyboardMouse: false, pad: controlPadOne }), controlPadOne, dt);
       }
-    } else {
-      updatePlayer(playerOne, cameraOne, getInputState({ keyboardMouse: false, pad: controlPadOne }), controlPadOne, dt);
-    }
-    updateSpawnDirector();
-    for (let i = 0; i < enemies.length; i += 1) {
-      updateEnemy(enemies[i], dt, i);
+      updateSpawnDirector();
+      for (let i = 0; i < enemies.length; i += 1) {
+        updateEnemy(enemies[i], dt, i);
+      }
     }
   }
 
