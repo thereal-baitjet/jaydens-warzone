@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { ControllerManager } from "./controllerManager.js";
 import { PromptManager } from "./controllerPromptManager.js";
+import { KaijuBoss } from "./game/entities/KaijuBoss.js";
 import "./styles.css";
 
 const app = document.querySelector("#app");
@@ -49,6 +50,7 @@ const dragonSpriteSheetSrc = "/assets/enemy-dragon-detail-sheet.png";
 const fireballSpriteSheetSrc = "/assets/fireball-sheet.png";
 const finalBossSpriteSheetSrc = "/assets/final-boss-sheet.png";
 const finalBossCutsceneSrc = "/assets/final-boss-cutscene.png";
+const aerialBossSpriteSheetSrc = "/assets/aerial-boss-sheet.png";
 const rumaiaSpriteSheetSrc = "/assets/rumaia-sheet.png";
 const fireballGravity = 3.8;
 const fireballBaseSpeed = 21;
@@ -58,11 +60,22 @@ const finalBossHeight = 11.65;
 const finalBossWidth = 6.35;
 const finalBossIntroDuration = 4.8;
 const finalBossCrashDuration = 3.3;
+const aerialBossHeight = 4.45;
+const aerialBossWidth = 3.35;
+const aerialBossHealth = 950;
+const aerialBossArrivalDelay = 30;
+const aerialProjectileGravity = 1.9;
+const aerialProjectileSpeed = 18.5;
+const aerialProjectileRadius = 0.58;
+const aerialProjectileLifetime = 4.4;
 const rumaiaHeight = 3.15;
 const rumaiaWidth = 2.35;
 const rumaiaHealth = 200;
 const rumaiaArrivalDelay = 10;
 const nuclearExplosionDuration = 3.8;
+const kaijuStormClearDelay = 5;
+const kaijuMaxHealth = 5000;
+const kaijuBossScale = 11;
 const rewardBoxPositions = [
   [0, 1.0, 68],
   [-8, 1.0, 38],
@@ -193,6 +206,13 @@ app.innerHTML = `
         <div class="compass-labels">
           <span>W</span><span>NW</span><span>N</span><span>NE</span><span>E</span>
         </div>
+      </div>
+      <div class="kaiju-health" data-ui="kaijuHealth" hidden>
+        <div class="kaiju-health-header">
+          <span>KAIJU BOSS</span>
+          <strong data-ui="kaijuHealthValue">5000 / 5000</strong>
+        </div>
+        <div class="kaiju-health-track"><i data-ui="kaijuHealthBar"></i></div>
       </div>
       <div class="message-feed" data-ui="feed"></div>
       <div class="music-unlock" data-ui="musicUnlock">
@@ -549,6 +569,9 @@ const ui = {
   crosshair: document.querySelector('[data-ui="crosshair"]'),
   hit: document.querySelector('[data-ui="hit"]'),
   damage: document.querySelector('[data-ui="damage"]'),
+  kaijuHealth: document.querySelector('[data-ui="kaijuHealth"]'),
+  kaijuHealthBar: document.querySelector('[data-ui="kaijuHealthBar"]'),
+  kaijuHealthValue: document.querySelector('[data-ui="kaijuHealthValue"]'),
   health: document.querySelector('[data-ui="health"]'),
   armor: document.querySelector('[data-ui="armor"]'),
   stamina: document.querySelector('[data-ui="stamina"]'),
@@ -595,6 +618,7 @@ const spawnQueue = [];
 const particles = [];
 const tracers = [];
 const fireballs = [];
+const aerialProjectiles = [];
 const powerUps = [];
 const rewardBoxes = [];
 
@@ -833,6 +857,11 @@ const game = {
   bossSpawned: false,
   bossDefeated: false,
   bossPlane: null,
+  aerialBossPhase: "idle",
+  aerialBossSpawnAt: 0,
+  aerialBossSpawned: false,
+  aerialBossDefeated: false,
+  aerialBoss: null,
   rumaiaPhase: "idle",
   rumaiaSpawnAt: 0,
   rumaiaSpawned: false,
@@ -840,6 +869,12 @@ const game = {
   nukeStartedAt: 0,
   nuke: null,
   nukeNextSmokeAt: 0,
+  kaijuPhase: "idle",
+  kaijuSpawnAt: 0,
+  kaijuStormStartedAt: 0,
+  kaijuRoarAt: 0,
+  kaijuOrigin: new THREE.Vector3(0, 0, -35),
+  kaijuBoss: null,
   messages: []
 };
 const introState = {
@@ -1044,6 +1079,34 @@ const rumaiaSpriteCells = [
   { x: 976, y: 432, w: 246, h: 388 }
 ];
 
+const aerialBossSpriteCells = {
+  swing: [
+    { x: 14, y: 74, w: 190, h: 252 },
+    { x: 14, y: 348, w: 190, h: 254 },
+    { x: 18, y: 648, w: 188, h: 252 },
+    { x: 14, y: 934, w: 192, h: 258 }
+  ],
+  spin: [
+    { x: 230, y: 76, w: 206, h: 174 },
+    { x: 232, y: 306, w: 204, h: 176 },
+    { x: 236, y: 520, w: 198, h: 170 },
+    { x: 244, y: 738, w: 188, h: 176 },
+    { x: 238, y: 966, w: 196, h: 176 }
+  ],
+  glide: [
+    { x: 472, y: 78, w: 166, h: 256 },
+    { x: 472, y: 338, w: 166, h: 250 },
+    { x: 488, y: 636, w: 154, h: 254 },
+    { x: 488, y: 932, w: 154, h: 254 }
+  ],
+  dash: [
+    { x: 656, y: 78, w: 178, h: 214 },
+    { x: 658, y: 350, w: 174, h: 210 },
+    { x: 660, y: 650, w: 174, h: 210 },
+    { x: 662, y: 936, w: 172, h: 210 }
+  ]
+};
+
 function drawContainedCell(ctx, image, cell, maxWidth = 468, maxHeight = 492, yBias = 0) {
   const scale = Math.min(maxWidth / cell.w, maxHeight / cell.h);
   const width = cell.w * scale;
@@ -1111,6 +1174,39 @@ function createRumaiaSpriteTexture(cellIndex = 0) {
     texture.needsUpdate = true;
   };
   image.src = rumaiaSpriteSheetSrc;
+  return texture;
+}
+
+function createAerialBossSpriteTexture(mode = "glide", frame = 0) {
+  const frames = aerialBossSpriteCells[mode] || aerialBossSpriteCells.glide;
+  const cell = frames[frame % frames.length] || frames[0];
+  const canvas = document.createElement("canvas");
+  canvas.width = 512;
+  canvas.height = 512;
+  const ctx = canvas.getContext("2d");
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const gradient = ctx.createRadialGradient(256, 244, 22, 256, 256, 196);
+  gradient.addColorStop(0, "rgba(248, 90, 68, 0.9)");
+  gradient.addColorStop(0.44, "rgba(39, 196, 177, 0.72)");
+  gradient.addColorStop(1, "rgba(23, 75, 96, 0.22)");
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.ellipse(256, 268, 108, 178, 0, 0, Math.PI * 2);
+  ctx.fill();
+  texture.needsUpdate = true;
+
+  const image = new Image();
+  image.onload = () => {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    drawContainedCell(ctx, image, cell, 458, 484, mode === "spin" ? 10 : 2);
+    removeConnectedBlueBackground(ctx, canvas.width, canvas.height);
+    trimAlphaToCenter(ctx, canvas.width, canvas.height, mode === "spin" ? 26 : 14);
+    texture.needsUpdate = true;
+  };
+  image.src = aerialBossSpriteSheetSrc;
   return texture;
 }
 
@@ -1381,6 +1477,55 @@ function removeConnectedLightBackground(ctx, width, height) {
   ctx.putImageData(imageData, 0, 0);
 }
 
+function removeConnectedBlueBackground(ctx, width, height) {
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const data = imageData.data;
+  const visited = new Uint8Array(width * height);
+  const queue = [];
+
+  const shouldErase = (index) => {
+    const p = index * 4;
+    const r = data[p];
+    const g = data[p + 1];
+    const b = data[p + 2];
+    const a = data[p + 3];
+    const paleBlue = r > 112 && g > 145 && b > 160 && b - r > 16;
+    const checkerWhite = r > 196 && g > 214 && b > 222;
+    return a < 18 || paleBlue || checkerWhite;
+  };
+
+  const enqueue = (x, y) => {
+    if (x < 0 || x >= width || y < 0 || y >= height) return;
+    const index = y * width + x;
+    if (visited[index] || !shouldErase(index)) return;
+    visited[index] = 1;
+    queue.push(index);
+  };
+
+  for (let x = 0; x < width; x += 1) {
+    enqueue(x, 0);
+    enqueue(x, height - 1);
+  }
+  for (let y = 0; y < height; y += 1) {
+    enqueue(0, y);
+    enqueue(width - 1, y);
+  }
+
+  while (queue.length) {
+    const index = queue.pop();
+    const p = index * 4;
+    data[p + 3] = 0;
+    const x = index % width;
+    const y = Math.floor(index / width);
+    enqueue(x + 1, y);
+    enqueue(x - 1, y);
+    enqueue(x, y + 1);
+    enqueue(x, y - 1);
+  }
+
+  ctx.putImageData(imageData, 0, 0);
+}
+
 function trimAlphaToCenter(ctx, width, height, padding = 14) {
   const imageData = ctx.getImageData(0, 0, width, height);
   const data = imageData.data;
@@ -1436,6 +1581,20 @@ function createSharedAssets() {
     enemyCommander: new THREE.MeshStandardMaterial({ color: 0x7b2f2f, roughness: 0.68 }),
     bossPlane: new THREE.MeshStandardMaterial({ color: 0x1c2b36, roughness: 0.58, metalness: 0.32 }),
     bossLaser: new THREE.MeshBasicMaterial({ color: 0x5ae7ff, transparent: true, opacity: 0.9 }),
+    aerialWater: new THREE.MeshBasicMaterial({
+      color: 0x63ffe5,
+      transparent: true,
+      opacity: 0.74,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    }),
+    aerialBlade: new THREE.MeshBasicMaterial({
+      color: 0xb8fff7,
+      transparent: true,
+      opacity: 0.82,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    }),
     enemyHitbox: new THREE.MeshBasicMaterial({
       transparent: true,
       opacity: 0,
@@ -1485,6 +1644,12 @@ function createSharedAssets() {
   shared.enemyAttackTexture = createDragonAttackTexture();
   shared.bossSpriteTextures = Object.fromEntries(
     Object.keys(bossSpriteCells).map((pose) => [pose, createBossSpriteTexture(pose)])
+  );
+  shared.aerialBossSpriteTextures = Object.fromEntries(
+    Object.entries(aerialBossSpriteCells).map(([mode, frames]) => [
+      mode,
+      frames.map((_, index) => createAerialBossSpriteTexture(mode, index))
+    ])
   );
   shared.rumaiaSpriteTextures = Array.from({ length: 8 }, (_, index) => createRumaiaSpriteTexture(index));
   shared.fireballTexture = createFireballSpriteTexture("projectile");
@@ -2205,6 +2370,16 @@ function createEnemy(type, position, seed) {
       material: shared.materials.enemyCommander,
       boss: true
     },
+    aerialBoss: {
+      health: aerialBossHealth,
+      speed: 7.2,
+      fireRate: 1.05,
+      range: 96,
+      accuracy: 0.34,
+      damage: 14,
+      material: shared.materials.powerJammer,
+      aerialBoss: true
+    },
     rumaia: {
       health: rumaiaHealth,
       speed: 0,
@@ -2219,46 +2394,53 @@ function createEnemy(type, position, seed) {
   }[type];
 
   const isBoss = Boolean(config.boss);
+  const isAerialBoss = Boolean(config.aerialBoss);
   const isRumaia = Boolean(config.rumaia);
-  const hitboxHeight = isBoss ? finalBossHeight : isRumaia ? rumaiaHeight : 1.9;
-  const hitboxWidth = isBoss ? finalBossWidth : isRumaia ? rumaiaWidth : 1.72;
-  const spriteHeight = isBoss ? finalBossHeight : isRumaia ? rumaiaHeight : type === "commander" ? 4.2 : 3.88;
-  const spriteWidth = isBoss ? finalBossWidth : isRumaia ? rumaiaWidth : type === "commander" ? 4.15 : 3.72;
+  const hitboxHeight = isBoss ? finalBossHeight : isAerialBoss ? aerialBossHeight : isRumaia ? rumaiaHeight : 1.9;
+  const hitboxWidth = isBoss ? finalBossWidth : isAerialBoss ? aerialBossWidth : isRumaia ? rumaiaWidth : 1.72;
+  const spriteHeight = isBoss ? finalBossHeight : isAerialBoss ? aerialBossHeight : isRumaia ? rumaiaHeight : type === "commander" ? 4.2 : 3.88;
+  const spriteWidth = isBoss ? finalBossWidth : isAerialBoss ? aerialBossWidth : isRumaia ? rumaiaWidth : type === "commander" ? 4.15 : 3.72;
   const group = new THREE.Group();
   group.position.copy(position);
   scene.add(group);
 
-  const body = new THREE.Mesh(isBoss || isRumaia ? shared.geometries.box : shared.geometries.soldierBody, shared.materials.enemyHitbox);
-  body.position.y = isBoss || isRumaia ? hitboxHeight * 0.5 : 1.0;
-  if (isBoss || isRumaia) body.scale.set(hitboxWidth * 0.82, hitboxHeight * 0.9, isRumaia ? 0.46 : 0.72);
+  const largeSpriteEnemy = isBoss || isAerialBoss || isRumaia;
+  const body = new THREE.Mesh(largeSpriteEnemy ? shared.geometries.box : shared.geometries.soldierBody, shared.materials.enemyHitbox);
+  body.position.y = largeSpriteEnemy ? hitboxHeight * 0.5 : 1.0;
+  if (largeSpriteEnemy) body.scale.set(hitboxWidth * 0.82, hitboxHeight * 0.9, isRumaia ? 0.46 : isAerialBoss ? 0.58 : 0.72);
   body.castShadow = false;
   group.add(body);
 
   const head = new THREE.Mesh(shared.geometries.soldierHead, shared.materials.enemyHitbox);
-  head.position.y = isBoss ? finalBossHeight * 0.82 : isRumaia ? rumaiaHeight * 0.8 : 1.72;
+  head.position.y = isBoss ? finalBossHeight * 0.82 : isAerialBoss ? aerialBossHeight * 0.76 : isRumaia ? rumaiaHeight * 0.8 : 1.72;
   if (isBoss) head.scale.setScalar(4.2);
+  if (isAerialBoss) head.scale.setScalar(1.64);
   if (isRumaia) head.scale.setScalar(1.45);
   head.castShadow = false;
   group.add(head);
 
   const helmet = new THREE.Mesh(shared.geometries.soldierHead, shared.materials.enemyHitbox);
-  helmet.position.y = isBoss ? finalBossHeight * 0.88 : isRumaia ? rumaiaHeight * 0.87 : 1.83;
-  helmet.scale.set(isBoss ? 4.55 : isRumaia ? 1.56 : 1.08, isBoss ? 2.1 : isRumaia ? 0.82 : 0.56, isBoss ? 4.55 : isRumaia ? 1.56 : 1.08);
+  helmet.position.y = isBoss ? finalBossHeight * 0.88 : isAerialBoss ? aerialBossHeight * 0.86 : isRumaia ? rumaiaHeight * 0.87 : 1.83;
+  helmet.scale.set(
+    isBoss ? 4.55 : isAerialBoss ? 1.72 : isRumaia ? 1.56 : 1.08,
+    isBoss ? 2.1 : isAerialBoss ? 0.86 : isRumaia ? 0.82 : 0.56,
+    isBoss ? 4.55 : isAerialBoss ? 1.72 : isRumaia ? 1.56 : 1.08
+  );
   helmet.castShadow = false;
   group.add(helmet);
 
   const leftWing = new THREE.Mesh(shared.geometries.box, shared.materials.enemyHitbox);
-  leftWing.position.set(isBoss ? -finalBossWidth * 0.33 : isRumaia ? -rumaiaWidth * 0.28 : -0.72, isBoss ? finalBossHeight * 0.5 : isRumaia ? rumaiaHeight * 0.5 : 1.55, 0);
-  leftWing.scale.set(isBoss ? finalBossWidth * 0.38 : isRumaia ? rumaiaWidth * 0.38 : 0.86, isBoss ? finalBossHeight * 0.86 : isRumaia ? rumaiaHeight * 0.72 : 1.28, isBoss ? 0.62 : isRumaia ? 0.36 : 0.22);
+  leftWing.position.set(isBoss ? -finalBossWidth * 0.33 : isAerialBoss ? -aerialBossWidth * 0.34 : isRumaia ? -rumaiaWidth * 0.28 : -0.72, isBoss ? finalBossHeight * 0.5 : isAerialBoss ? aerialBossHeight * 0.52 : isRumaia ? rumaiaHeight * 0.5 : 1.55, 0);
+  leftWing.scale.set(isBoss ? finalBossWidth * 0.38 : isAerialBoss ? aerialBossWidth * 0.4 : isRumaia ? rumaiaWidth * 0.38 : 0.86, isBoss ? finalBossHeight * 0.86 : isAerialBoss ? aerialBossHeight * 0.76 : isRumaia ? rumaiaHeight * 0.72 : 1.28, isBoss ? 0.62 : isAerialBoss ? 0.42 : isRumaia ? 0.36 : 0.22);
   group.add(leftWing);
 
   const rightWing = new THREE.Mesh(shared.geometries.box, shared.materials.enemyHitbox);
-  rightWing.position.set(isBoss ? finalBossWidth * 0.33 : isRumaia ? rumaiaWidth * 0.28 : 0.72, isBoss ? finalBossHeight * 0.5 : isRumaia ? rumaiaHeight * 0.5 : 1.55, 0);
-  rightWing.scale.set(isBoss ? finalBossWidth * 0.38 : isRumaia ? rumaiaWidth * 0.38 : 0.86, isBoss ? finalBossHeight * 0.86 : isRumaia ? rumaiaHeight * 0.72 : 1.28, isBoss ? 0.62 : isRumaia ? 0.36 : 0.22);
+  rightWing.position.set(isBoss ? finalBossWidth * 0.33 : isAerialBoss ? aerialBossWidth * 0.34 : isRumaia ? rumaiaWidth * 0.28 : 0.72, isBoss ? finalBossHeight * 0.5 : isAerialBoss ? aerialBossHeight * 0.52 : isRumaia ? rumaiaHeight * 0.5 : 1.55, 0);
+  rightWing.scale.set(isBoss ? finalBossWidth * 0.38 : isAerialBoss ? aerialBossWidth * 0.4 : isRumaia ? rumaiaWidth * 0.38 : 0.86, isBoss ? finalBossHeight * 0.86 : isAerialBoss ? aerialBossHeight * 0.76 : isRumaia ? rumaiaHeight * 0.72 : 1.28, isBoss ? 0.62 : isAerialBoss ? 0.42 : isRumaia ? 0.36 : 0.22);
   group.add(rightWing);
 
   const spriteMaterial = new THREE.MeshBasicMaterial({
-    map: isBoss ? shared.bossSpriteTextures.idle : isRumaia ? shared.rumaiaSpriteTextures[0] : shared.enemySpriteTextures[0],
+    map: isBoss ? shared.bossSpriteTextures.idle : isAerialBoss ? shared.aerialBossSpriteTextures.glide[0] : isRumaia ? shared.rumaiaSpriteTextures[0] : shared.enemySpriteTextures[0],
     transparent: true,
     alphaTest: 0.08,
     side: THREE.DoubleSide,
@@ -2292,10 +2474,11 @@ function createEnemy(type, position, seed) {
     health: config.health,
     alive: true,
     boss: isBoss,
+    aerialBoss: isAerialBoss,
     rumaia: isRumaia,
     harmless: Boolean(config.harmless),
-    eyeHeight: isBoss ? finalBossHeight * 0.72 : isRumaia ? rumaiaHeight * 0.72 : 1.55,
-    targetHeight: isBoss ? finalBossHeight * 0.48 : isRumaia ? rumaiaHeight * 0.52 : 1.22,
+    eyeHeight: isBoss ? finalBossHeight * 0.72 : isAerialBoss ? aerialBossHeight * 0.7 : isRumaia ? rumaiaHeight * 0.72 : 1.55,
+    targetHeight: isBoss ? finalBossHeight * 0.48 : isAerialBoss ? aerialBossHeight * 0.5 : isRumaia ? rumaiaHeight * 0.52 : 1.22,
     seed,
     state: "patrol",
     target: position.clone(),
@@ -2303,11 +2486,18 @@ function createEnemy(type, position, seed) {
     fireTimer: randomRange(seed, 0, config.fireRate),
     breathUntil: -10,
     decisionTimer: randomRange(seed + 4, 0.1, 0.8),
-    updateSkip: isBoss || isRumaia ? 0 : Math.floor(randomRange(seed + 9, 0, 4)),
+    updateSkip: largeSpriteEnemy ? 0 : Math.floor(randomRange(seed + 9, 0, 4)),
     stuckTimer: 0,
     aimYaw: randomRange(seed + 13, -Math.PI, Math.PI),
     cover: null,
-    flankSide: seededRandom(seed + 22) > 0.5 ? 1 : -1
+    flankSide: seededRandom(seed + 22) > 0.5 ? 1 : -1,
+    flightAngle: randomRange(seed + 31, 0, Math.PI * 2),
+    flightAltitude: randomRange(seed + 37, 7.2, 12.8),
+    attackMode: "glide",
+    modeUntil: game.time + randomRange(seed + 41, 1.8, 3.2),
+    dashUntil: -10,
+    dashVector: new THREE.Vector3(),
+    trailAt: 0
   };
 
   body.userData.enemy = enemy;
@@ -2540,6 +2730,7 @@ function nearestPlayerTarget(position) {
 function updateSpawnDirector() {
   if (!game.running || spawnQueue.length === 0) return;
   if (game.bossPhase !== "idle") return;
+  if (game.aerialBossPhase !== "idle" || game.rumaiaPhase !== "idle" || game.kaijuPhase !== "idle") return;
 
   const completedPrimary = objectives.filter((objective) => !objective.extraction && objective.complete).length;
   const active = activeEnemyCount();
@@ -3861,6 +4052,14 @@ function detonateFrag(position) {
     damageEnemy(enemy, damage, false, "frag");
     hits += 1;
   }
+  if (game.kaijuBoss?.alive) {
+    const distance = game.kaijuBoss.position.distanceTo(position);
+    const effectiveRadius = radius + 4.5;
+    if (distance <= effectiveRadius) {
+      game.kaijuBoss.takeDamage(220 * (1 - distance / effectiveRadius) + 80);
+      hits += 1;
+    }
+  }
   pulseGamepad(activeGamepad, 0.22, 0.5, 130);
   playTone("objective");
   addMessage(hits ? `${promptNameForAction("lethal")} frag blast hit ${hits} hostile${hits === 1 ? "" : "s"}.` : `${promptNameForAction("lethal")} frag detonated.`);
@@ -4196,6 +4395,15 @@ function fireRifle() {
     endpoint = hit.point.clone();
     if (hit.object.userData.rewardBox) {
       destroyRewardBox(hit.object.userData.rewardBox, hit.point, hit.face?.normal || new THREE.Vector3(0, 1, 0));
+    } else if (hit.object.userData.kaijuBoss?.alive) {
+      const boss = hit.object.userData.kaijuBoss;
+      const weakSpot = hit.uv && hit.uv.y > 0.62;
+      const damage = weakSpot
+        ? config.headshotDamage
+        : randomRange(Math.floor(game.time * 503), config.damageMin, config.damageMax);
+      boss.takeDamage(damage);
+      spawnImpact(hit.point, hit.face?.normal || new THREE.Vector3(0, 1, 0));
+      showHitMarker();
     } else if (hit.object.userData.enemy && hit.object.userData.enemy.alive) {
       const enemy = hit.object.userData.enemy;
       const spriteHeadshot = hit.object === enemy.sprite && hit.uv && hit.uv.y > 0.68;
@@ -4228,8 +4436,16 @@ function damageEnemy(enemy, damage, headshot = false, source = "rifle") {
     if (enemy.boss) {
       game.bossPhase = "defeated";
       game.bossDefeated = true;
-      game.objectiveMessage = `Korsak defeated. RUMAIA appears in ${rumaiaArrivalDelay} seconds.`;
-      addMessage(`Korsak down. RUMAIA appears in ${rumaiaArrivalDelay} seconds.`);
+      game.objectiveMessage = `Korsak defeated. Aerial boss appears in ${aerialBossArrivalDelay} seconds.`;
+      addMessage(`Korsak down. Aerial boss appears in ${aerialBossArrivalDelay} seconds.`);
+      scheduleAerialBossArrival();
+      return;
+    }
+    if (enemy.aerialBoss) {
+      game.aerialBossPhase = "defeated";
+      game.aerialBossDefeated = true;
+      game.objectiveMessage = `Aerial boss defeated. RUMAIA appears in ${rumaiaArrivalDelay} seconds.`;
+      addMessage(`Aerial boss down. RUMAIA appears in ${rumaiaArrivalDelay} seconds.`);
       scheduleRumaiaArrival();
       return;
     }
@@ -4280,6 +4496,38 @@ function startFinalBossSequence() {
   playTone("objective");
 }
 
+function scheduleAerialBossArrival() {
+  if (game.aerialBossPhase !== "idle") return;
+  game.aerialBossPhase = "waiting";
+  game.aerialBossSpawnAt = game.time + aerialBossArrivalDelay;
+}
+
+function spawnAerialBoss() {
+  if (game.aerialBossSpawned) return;
+  game.aerialBossSpawned = true;
+  game.aerialBossPhase = "active";
+  game.hostilesAlive = 1;
+  game.totalHostiles += 1;
+  const boss = createEnemy("aerialBoss", new THREE.Vector3(-8, 9.4, -24), game.spawnSeed + 11001);
+  boss.state = "glide";
+  boss.attackMode = "glide";
+  boss.modeUntil = game.time + 2.4;
+  boss.aimYaw = Math.PI;
+  game.aerialBoss = boss;
+  game.objectiveMessage = "Aerial boss inbound. Track the swimming flight and shoot the full sprite.";
+  addMessage("Aerial boss is airborne. Dodge spin blades, swing arcs, and dash attacks.");
+  playTone("objective");
+}
+
+function updateAerialBossSequence() {
+  if (game.aerialBossPhase !== "waiting") return;
+  const remaining = Math.max(0, Math.ceil(game.aerialBossSpawnAt - game.time));
+  game.objectiveMessage = `Aerial boss arrives in ${remaining}s. Regroup and watch the sky.`;
+  if (game.time >= game.aerialBossSpawnAt) {
+    spawnAerialBoss();
+  }
+}
+
 function scheduleRumaiaArrival() {
   if (game.rumaiaPhase !== "idle") return;
   game.rumaiaPhase = "waiting";
@@ -4320,7 +4568,7 @@ function triggerNuclearExplosion(origin) {
   game.rumaiaPhase = "detonating";
   game.nukeStartedAt = game.time;
   game.nukeNextSmokeAt = game.time;
-  game.objectiveMessage = "RUMAIA nuclear bloom expanding. Stand by for extraction video.";
+  game.objectiveMessage = "RUMAIA nuclear bloom expanding. Stand by for storm clearing.";
   setNukeFlashVisible(true);
   playTone("objective");
 
@@ -4397,12 +4645,94 @@ function updateRumaiaSequence(dt) {
 
   if (progress >= 1) {
     game.rumaiaPhase = "done";
+    const origin = game.nuke.origin.clone();
     scene.remove(game.nuke.group);
     game.nuke = null;
     setNukeFlashVisible(false);
-    addMessage("Map engulfed. Opening victory video.");
-    scheduleVictoryRedirect();
+    scheduleKaijuArrival(origin);
   }
+}
+
+function scheduleKaijuArrival(origin = new THREE.Vector3(0, 0, -35)) {
+  if (game.kaijuPhase !== "idle") return;
+  game.kaijuPhase = "storm";
+  game.kaijuStormStartedAt = game.time;
+  game.kaijuSpawnAt = game.time + kaijuStormClearDelay;
+  game.kaijuRoarAt = game.time;
+  game.kaijuOrigin = origin.clone();
+  game.objectiveMessage = `Storm clearing. Kaiju contact in ${kaijuStormClearDelay}s.`;
+  addMessage("The nuclear storm is clearing. Dinosaur roars detected beyond the depot.");
+  playKaijuRoar();
+}
+
+function spawnKaijuBoss() {
+  if (game.kaijuBoss) return;
+  game.kaijuPhase = "active";
+  game.hostilesAlive = 1;
+  game.totalHostiles += 1;
+  // Spawn point for the post-nuke final boss. Move this vector to relocate the kaiju.
+  const spawnPosition = new THREE.Vector3(0, 0, -35);
+  game.kaijuBoss = new KaijuBoss({
+    scene,
+    position: spawnPosition,
+    scale: kaijuBossScale,
+    maxHealth: kaijuMaxHealth,
+    fireballCooldown: 3,
+    onFireballHit: (actor, damage, impactPosition) => {
+      setActivePlayer(actor, cameraForRole(actor.role), padForLocalActor(actor));
+      damagePlayer(damage);
+      spawnImpact(impactPosition);
+      addMessage("Kaiju fireball impact. Keep distance and use cover.");
+    },
+    onDefeated: handleKaijuDefeated,
+    onRoar: playKaijuRoar
+  });
+  for (const mesh of game.kaijuBoss.hitMeshes) {
+    enemyHitMeshes.push(mesh);
+  }
+  renderer.toneMappingExposure = 1.08;
+  scene.fog.density = 0.009;
+  game.objectiveMessage = "KAIJU BOSS active. 5000 HP. Shoot the huge sprite and dodge fireballs.";
+  addMessage("KAIJU BOSS emerged. 5000 HP. Fireballs incoming.");
+  playTone("objective");
+}
+
+function handleKaijuDefeated(boss) {
+  if (boss?.hitMeshes) {
+    for (const mesh of boss.hitMeshes) {
+      removeFromArray(enemyHitMeshes, mesh);
+    }
+  }
+  game.kaijuPhase = "defeated";
+  game.hostilesAlive = 0;
+  game.objectiveMessage = "KAIJU BOSS defeated. Opening victory video.";
+  addMessage("KAIJU BOSS defeated. Final extraction video opening.");
+  updateKaijuHealthUi();
+  playTone("kill");
+  scheduleVictoryRedirect();
+}
+
+function updateKaijuSequence(dt) {
+  if (game.kaijuPhase === "storm") {
+    const remaining = Math.max(0, Math.ceil(game.kaijuSpawnAt - game.time));
+    const progress = clamp((game.time - game.kaijuStormStartedAt) / kaijuStormClearDelay, 0, 1);
+    scene.fog.density = 0.026 - progress * 0.017;
+    renderer.toneMappingExposure = 1.35 - progress * 0.27;
+    game.objectiveMessage = `Storm clearing. Kaiju contact in ${remaining}s.`;
+    if (game.time >= game.kaijuRoarAt) {
+      game.kaijuRoarAt = game.time + 1.35;
+      playKaijuRoar();
+      addTemporarySmokeColumn(new THREE.Vector3(randomRange(game.time * 41, -22, 22), 0, randomRange(game.time * 59, -42, -18)), 3, 2.4);
+    }
+    if (game.time >= game.kaijuSpawnAt) {
+      spawnKaijuBoss();
+    }
+    return;
+  }
+
+  if (game.kaijuPhase !== "active" || !game.kaijuBoss) return;
+  game.kaijuBoss.update(dt, activePlayers(), camera);
+  game.objectiveMessage = `KAIJU BOSS: ${Math.ceil(game.kaijuBoss.currentHealth)} / ${game.kaijuBoss.maxHealth} HP. Dodge fireballs.`;
 }
 
 function createBossPlane() {
@@ -4528,6 +4858,19 @@ function scheduleVictoryRedirect() {
 
 function collapseEnemy(enemy) {
   const yaw = enemy.group.rotation.y;
+  if (enemy.aerialBoss) {
+    enemy.group.position.y = 0.24;
+    enemy.group.rotation.set(Math.PI / 2, yaw, randomRange(enemy.seed, -0.35, 0.35));
+    enemy.group.scale.set(1.08, 0.9, 1.08);
+    enemy.spriteMaterial.map = shared.aerialBossSpriteTextures.glide[0];
+    enemy.spriteMaterial.color.set(0x96fff2);
+    enemy.spriteMaterial.opacity = 0.88;
+    enemy.spriteMaterial.needsUpdate = true;
+    enemy.sprite.position.copy(enemy.group.position).add(new THREE.Vector3(0, -0.14, 0));
+    enemy.sprite.rotation.set(-Math.PI / 2, 0, yaw + randomRange(enemy.seed + 3, -0.42, 0.42));
+    enemy.sprite.scale.set(aerialBossWidth * 1.4, aerialBossHeight * 0.64, 1);
+    return;
+  }
   if (enemy.rumaia) {
     enemy.group.position.y = 0.18;
     enemy.group.rotation.set(Math.PI / 2, yaw, randomRange(enemy.seed, -0.25, 0.25));
@@ -4582,6 +4925,33 @@ function enemySpriteIndex(enemy, view = camera) {
 
 function updateEnemyVisual(enemy, view = camera) {
   if (!enemy.alive) return;
+
+  if (enemy.aerialBoss) {
+    const mode = enemy.attackMode === "dash"
+      ? "dash"
+      : enemy.attackMode === "spin"
+        ? "spin"
+        : enemy.attackMode === "swing"
+          ? "swing"
+          : "glide";
+    const frames = shared.aerialBossSpriteTextures[mode] || shared.aerialBossSpriteTextures.glide;
+    const frameRate = mode === "spin" ? 10 : mode === "dash" ? 8 : 6;
+    const frame = Math.floor(game.time * frameRate) % frames.length;
+    const nextMap = frames[frame] || frames[0];
+    const spriteKey = `${mode}:${frame}`;
+    if (enemy.currentSpriteIndex !== spriteKey || enemy.spriteMaterial.map !== nextMap) {
+      enemy.currentSpriteIndex = spriteKey;
+      enemy.spriteMaterial.map = nextMap;
+      enemy.spriteMaterial.needsUpdate = true;
+    }
+    const attacking = game.time < enemy.breathUntil;
+    const bob = Math.sin(game.time * 3.1 + enemy.seed) * 0.12;
+    const pulse = attacking ? 1.08 + Math.sin(game.time * 24) * 0.03 : 1 + Math.sin(game.time * 4.2) * 0.025;
+    enemy.sprite.position.copy(enemy.group.position).add(new THREE.Vector3(0, aerialBossHeight * 0.5 + bob, 0));
+    enemy.sprite.lookAt(view.position.x, enemy.sprite.position.y, view.position.z);
+    enemy.sprite.scale.set(aerialBossWidth * pulse, aerialBossHeight * pulse, 1);
+    return;
+  }
 
   if (enemy.rumaia) {
     const index = enemySpriteIndex(enemy, view);
@@ -4897,6 +5267,212 @@ function updateFireballs(dt) {
   }
 }
 
+function spawnAerialTrail(enemy) {
+  const material = shared.materials.aerialWater.clone();
+  material.opacity = 0.2;
+  const mesh = new THREE.Mesh(shared.geometries.sphere, material);
+  const side = new THREE.Vector3(
+    randomRange(enemy.seed + Math.floor(game.time * 71), -0.7, 0.7),
+    randomRange(enemy.seed + Math.floor(game.time * 89), -0.25, 0.25),
+    randomRange(enemy.seed + Math.floor(game.time * 101), -0.7, 0.7)
+  );
+  mesh.position.copy(enemy.group.position).add(side).add(new THREE.Vector3(0, aerialBossHeight * 0.35, 0));
+  mesh.scale.set(0.35, 0.16, 0.35);
+  scene.add(mesh);
+  particles.push({ mesh, type: "aerialTrail", age: 0, life: 0.72 });
+}
+
+function spawnAerialImpact(point) {
+  const burst = new THREE.Mesh(shared.geometries.sphere, shared.materials.aerialWater.clone());
+  burst.position.copy(point);
+  burst.scale.setScalar(0.22);
+  scene.add(burst);
+  particles.push({ mesh: burst, type: "impact", age: 0, life: 0.38 });
+
+  const ring = new THREE.Mesh(shared.geometries.pickupRing, shared.materials.aerialBlade.clone());
+  ring.position.copy(point);
+  ring.rotation.x = Math.PI / 2;
+  ring.scale.setScalar(0.46);
+  scene.add(ring);
+  particles.push({ mesh: ring, type: "impact", age: 0, life: 0.32 });
+}
+
+function removeAerialProjectile(projectile) {
+  scene.remove(projectile.group);
+  projectile.core.material.dispose();
+  projectile.ring.material.dispose();
+  projectile.light.dispose?.();
+}
+
+function spawnAerialProjectile(enemy, target, mode = "glide", spread = 0) {
+  const forward = new THREE.Vector3(Math.sin(enemy.aimYaw), 0, Math.cos(enemy.aimYaw));
+  const start = enemy.group.position.clone()
+    .addScaledVector(forward, 1.15)
+    .add(new THREE.Vector3(0, aerialBossHeight * 0.42, 0));
+  const aimPoint = target.actor.feet.clone().add(new THREE.Vector3(0, target.actor.height * 0.72, 0));
+  const distance = start.distanceTo(aimPoint);
+  const jammerPenalty = game.time < target.actor.jammerUntil ? 1.7 : 1;
+  const missRadius = clamp((1 - enemy.config.accuracy) * distance * 0.018 * jammerPenalty, 0.16, mode === "dash" ? 0.72 : 1.6);
+  const seed = enemy.seed + Math.floor(game.time * 1223) + Math.round(spread * 1000);
+  aimPoint.x += randomRange(seed + 1, -missRadius, missRadius);
+  aimPoint.y += randomRange(seed + 2, -missRadius * 0.26, missRadius * 0.34);
+  aimPoint.z += randomRange(seed + 3, -missRadius, missRadius);
+
+  const speed = mode === "spin" ? aerialProjectileSpeed * 0.86 : mode === "dash" ? aerialProjectileSpeed * 1.1 : aerialProjectileSpeed;
+  const velocity = ballisticVelocity(start, aimPoint, speed, aerialProjectileGravity).applyAxisAngle(worldUp, spread);
+  const group = new THREE.Group();
+  const core = new THREE.Mesh(shared.geometries.sphere, shared.materials.aerialWater.clone());
+  core.scale.set(0.26, 0.26, 0.26);
+  group.add(core);
+  const ring = new THREE.Mesh(shared.geometries.pickupRing, shared.materials.aerialBlade.clone());
+  ring.scale.setScalar(mode === "spin" ? 0.52 : 0.42);
+  group.add(ring);
+  const light = new THREE.PointLight(0x63ffe5, 2.6, 12, 2);
+  group.add(light);
+  group.position.copy(start);
+  scene.add(group);
+
+  aerialProjectiles.push({
+    group,
+    core,
+    ring,
+    light,
+    position: start.clone(),
+    previous: start.clone(),
+    velocity,
+    damage: enemy.config.damage * (mode === "dash" ? 1.35 : mode === "spin" ? 0.78 : 1),
+    age: 0,
+    seed,
+    mode,
+    source: enemy
+  });
+}
+
+function updateAerialProjectiles(dt) {
+  const local = localBundle();
+  for (let i = aerialProjectiles.length - 1; i >= 0; i -= 1) {
+    const projectile = aerialProjectiles[i];
+    projectile.age += dt;
+    projectile.previous.copy(projectile.position);
+    projectile.velocity.y -= aerialProjectileGravity * dt;
+    projectile.velocity.multiplyScalar(Math.pow(0.992, dt * 60));
+    projectile.position.addScaledVector(projectile.velocity, dt);
+    projectile.group.position.copy(projectile.position);
+    projectile.group.lookAt(local.view.position.x, projectile.position.y, local.view.position.z);
+    projectile.core.scale.setScalar(0.22 + Math.sin(game.time * 18 + projectile.seed) * 0.035);
+    projectile.ring.rotation.x += dt * 5.5;
+    projectile.ring.rotation.z += dt * 7.25;
+    projectile.light.intensity = 1.9 + Math.sin(game.time * 21 + projectile.seed) * 0.42;
+
+    const segment = projectile.position.clone().sub(projectile.previous);
+    const length = segment.length();
+    if (length > 0.001) {
+      raycaster.set(projectile.previous, segment.normalize());
+      raycaster.far = length + aerialProjectileRadius;
+      const solidHit = raycaster.intersectObjects(solidMeshes, false)[0];
+      raycaster.far = 160;
+      if (solidHit) {
+        spawnAerialImpact(solidHit.point);
+        removeAerialProjectile(projectile);
+        aerialProjectiles.splice(i, 1);
+        continue;
+      }
+    }
+
+    const hitActor = activePlayers().find((actor) => {
+      if (actor.downed) return false;
+      const center = actor.feet.clone().add(new THREE.Vector3(0, actor.height * 0.58, 0));
+      return distancePointToSegmentSquared(center, projectile.previous, projectile.position) < (aerialProjectileRadius + 0.42) ** 2;
+    });
+    if (hitActor) {
+      setActivePlayer(hitActor, cameraForRole(hitActor.role), padForLocalActor(hitActor));
+      damagePlayer(projectile.damage);
+      spawnAerialImpact(hitActor.feet.clone().add(new THREE.Vector3(0, hitActor.height * 0.55, 0)));
+      addMessage("Aerial water blade hit. Track her swimming path and sidestep.");
+      removeAerialProjectile(projectile);
+      aerialProjectiles.splice(i, 1);
+      continue;
+    }
+
+    if (projectile.age > aerialProjectileLifetime || projectile.position.y < -1) {
+      spawnAerialImpact(projectile.position);
+      removeAerialProjectile(projectile);
+      aerialProjectiles.splice(i, 1);
+    }
+  }
+}
+
+function updateAerialBoss(enemy, dt, target) {
+  const actor = target.actor;
+  const targetFeet = actor.feet.clone();
+  const playerCore = targetFeet.clone().add(new THREE.Vector3(0, actor.height * 0.68, 0));
+  const flatToPlayer = targetFeet.clone().sub(enemy.group.position);
+  flatToPlayer.y = 0;
+  const distance = flatToPlayer.length();
+
+  if (game.time >= enemy.modeUntil) {
+    const roll = seededRandom(enemy.seed + Math.floor(game.time * 3.7));
+    enemy.attackMode = roll > 0.74 ? "dash" : roll > 0.48 ? "spin" : roll > 0.2 ? "swing" : "glide";
+    enemy.modeUntil = game.time + (enemy.attackMode === "dash" ? 1.15 : enemy.attackMode === "spin" ? 2.25 : 2.85);
+    if (enemy.attackMode === "dash") {
+      enemy.dashVector.copy(playerCore.clone().add(new THREE.Vector3(0, 2.15, 0)).sub(enemy.group.position).normalize());
+      enemy.dashUntil = game.time + 1.0;
+      addMessage("Aerial dash incoming. Break sideways.");
+    }
+  }
+
+  if (enemy.attackMode === "dash" && game.time < enemy.dashUntil) {
+    enemy.group.position.addScaledVector(enemy.dashVector, dt * 22);
+    enemy.group.position.y = clamp(enemy.group.position.y, 4.8, 16);
+    if (enemy.group.position.distanceTo(playerCore) < 3.4 && game.time - (enemy.lastDashHitAt || -10) > 0.85) {
+      setActivePlayer(actor, target.view, target.pad);
+      damagePlayer(18);
+      spawnAerialImpact(playerCore);
+      enemy.lastDashHitAt = game.time;
+    }
+  } else {
+    enemy.flightAngle += dt * (enemy.attackMode === "spin" ? 2.15 : 0.88) * enemy.flankSide;
+    const radius = enemy.attackMode === "swing" ? 17 : enemy.attackMode === "spin" ? 12 : 24;
+    const altitude = enemy.flightAltitude + Math.sin(game.time * 1.35 + enemy.seed) * 2.4;
+    const desired = targetFeet.clone().add(new THREE.Vector3(
+      Math.cos(enemy.flightAngle) * radius,
+      altitude,
+      Math.sin(enemy.flightAngle) * radius
+    ));
+    const toDesired = desired.sub(enemy.group.position);
+    enemy.group.position.addScaledVector(toDesired, clamp(dt * 1.45, 0, 1));
+  }
+
+  enemy.group.position.x = clamp(enemy.group.position.x, -96, 96);
+  enemy.group.position.y = clamp(enemy.group.position.y, 4.6, 16.5);
+  enemy.group.position.z = clamp(enemy.group.position.z, -96, 96);
+
+  const toPlayer = playerCore.clone().sub(enemy.group.position);
+  if (toPlayer.lengthSq() > 0.001) {
+    enemy.aimYaw = Math.atan2(toPlayer.x, toPlayer.z);
+    enemy.group.rotation.y = enemy.aimYaw + Math.PI;
+  }
+
+  enemy.fireTimer -= dt;
+  if (distance < enemy.config.range && enemy.fireTimer <= 0) {
+    if (enemy.attackMode === "spin") {
+      spawnAerialProjectile(enemy, target, "spin", -0.18);
+      spawnAerialProjectile(enemy, target, "spin", 0);
+      spawnAerialProjectile(enemy, target, "spin", 0.18);
+    } else {
+      spawnAerialProjectile(enemy, target, enemy.attackMode);
+    }
+    enemy.breathUntil = game.time + 0.46;
+    enemy.fireTimer = enemy.config.fireRate * randomRange(enemy.seed + Math.floor(game.time * 17), 0.78, 1.32);
+    playTone("enemyShot");
+  }
+
+  if (game.time >= enemy.trailAt) {
+    enemy.trailAt = game.time + 0.085;
+    spawnAerialTrail(enemy);
+  }
+}
+
 function spawnTracer(start, end, color) {
   const material = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.85 });
   const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
@@ -4955,6 +5531,10 @@ function updateEnemy(enemy, dt, index) {
   const target = nearestPlayerTarget(enemy.group.position);
   setActivePlayer(target.actor, target.view, target.pad);
   if (player.downed) return;
+  if (enemy.aerialBoss) {
+    updateAerialBoss(enemy, dt, target);
+    return;
+  }
   if ((index + Math.floor(game.time * 10)) % (enemy.updateSkip + 1) !== 0 && enemy.group.position.distanceToSquared(player.feet) > 2500) {
     return;
   }
@@ -5018,6 +5598,11 @@ function updateEnemy(enemy, dt, index) {
 }
 
 function decideEnemyState(enemy, distance, seesPlayer) {
+  if (enemy.aerialBoss) {
+    enemy.state = enemy.attackMode || "glide";
+    return;
+  }
+
   if (enemy.rumaia) {
     enemy.state = "patrol";
     enemy.target.copy(enemy.group.position);
@@ -5080,7 +5665,7 @@ function decideEnemyState(enemy, distance, seesPlayer) {
 }
 
 function enemyFire(enemy, distance) {
-  if (enemy.harmless) return;
+  if (enemy.harmless || enemy.aerialBoss) return;
   const target = nearestPlayerTarget(enemy.group.position);
   enemy.breathUntil = game.time + (enemy.boss ? 0.62 : 0.46);
   if (enemy.boss) {
@@ -5201,7 +5786,10 @@ function updateObjectives(input, dt) {
   let nearest = null;
   let nearestDistance = Infinity;
   const completedPrimary = objectives.filter((objective) => !objective.extraction && objective.complete).length;
-  const finalSequenceBlocksExtraction = game.bossPhase !== "idle" || game.rumaiaPhase !== "idle";
+  const finalSequenceBlocksExtraction = game.bossPhase !== "idle"
+    || game.aerialBossPhase !== "idle"
+    || game.rumaiaPhase !== "idle"
+    || (game.kaijuPhase !== "idle" && game.kaijuPhase !== "defeated");
 
   for (const objective of objectives) {
     if (objective.extraction && (completedPrimary < 3 || game.hostilesAlive > 0 || finalSequenceBlocksExtraction)) {
@@ -5242,13 +5830,23 @@ function updateObjectives(input, dt) {
     }
   }
 
-  if (game.rumaiaPhase === "waiting") {
+  if (game.aerialBossPhase === "waiting") {
+    const remaining = Math.max(0, Math.ceil(game.aerialBossSpawnAt - game.time));
+    game.objectiveMessage = `Aerial boss arrives in ${remaining}s. Regroup and watch the sky.`;
+  } else if (game.aerialBossPhase === "active") {
+    game.objectiveMessage = "Aerial boss active. Shoot the whole sprite and dodge the swimming attacks.";
+  } else if (game.rumaiaPhase === "waiting") {
     const remaining = Math.max(0, Math.ceil(game.rumaiaSpawnAt - game.time));
     game.objectiveMessage = `RUMAIA arrives in ${remaining}s. Reload and regroup.`;
   } else if (game.rumaiaPhase === "active") {
     game.objectiveMessage = "RUMAIA is harmless. Deal 200 damage to trigger the final blast.";
   } else if (game.rumaiaPhase === "detonating") {
-    game.objectiveMessage = "RUMAIA nuclear bloom expanding. Stand by for extraction video.";
+    game.objectiveMessage = "RUMAIA nuclear bloom expanding. Stand by for storm clearing.";
+  } else if (game.kaijuPhase === "storm") {
+    const remaining = Math.max(0, Math.ceil(game.kaijuSpawnAt - game.time));
+    game.objectiveMessage = `Storm clearing. Kaiju contact in ${remaining}s.`;
+  } else if (game.kaijuPhase === "active") {
+    game.objectiveMessage = `KAIJU BOSS: ${Math.ceil(game.kaijuBoss?.currentHealth || 0)} / ${kaijuMaxHealth} HP. Dodge fireballs.`;
   } else if (game.bossPhase === "cutscene") {
     game.objectiveMessage = "Korsak inbound. Watch the commander-class cutscene.";
   } else if (game.bossPhase === "crash") {
@@ -5510,6 +6108,17 @@ function updateSplitGauges() {
   }
 }
 
+function updateKaijuHealthUi() {
+  if (!ui.kaijuHealth || !ui.kaijuHealthBar || !ui.kaijuHealthValue) return;
+  const boss = game.kaijuBoss;
+  const visible = game.kaijuPhase === "active" && boss?.alive;
+  ui.kaijuHealth.hidden = !visible;
+  if (!visible) return;
+  const current = Math.max(0, Math.ceil(boss.currentHealth));
+  ui.kaijuHealthValue.textContent = `${current} / ${boss.maxHealth}`;
+  ui.kaijuHealthBar.style.width = `${boss.healthRatio * 100}%`;
+}
+
 function updateHUD() {
   if (game.time - game.lastHud < 0.05) return;
   game.lastHud = game.time;
@@ -5517,11 +6126,20 @@ function updateHUD() {
   updateControllerCalibrationUi();
   updateRewardMusicUi();
   updateSplitGauges();
+  updateKaijuHealthUi();
   ui.objective.textContent = game.revivePrompt || game.objectiveMessage;
-  if (game.rumaiaPhase === "waiting") {
+  if (game.aerialBossPhase === "waiting") {
+    ui.hostiles.textContent = `AERIAL in ${Math.max(0, Math.ceil(game.aerialBossSpawnAt - game.time))}s`;
+  } else if (game.aerialBossPhase === "active") {
+    ui.hostiles.textContent = `AERIAL ${Math.max(0, Math.ceil(game.aerialBoss?.health || 0))} HP`;
+  } else if (game.rumaiaPhase === "waiting") {
     ui.hostiles.textContent = `RUMAIA in ${Math.max(0, Math.ceil(game.rumaiaSpawnAt - game.time))}s`;
   } else if (game.rumaiaPhase === "detonating") {
     ui.hostiles.textContent = "NUCLEAR BLOOM";
+  } else if (game.kaijuPhase === "storm") {
+    ui.hostiles.textContent = `KAIJU in ${Math.max(0, Math.ceil(game.kaijuSpawnAt - game.time))}s`;
+  } else if (game.kaijuPhase === "active") {
+    ui.hostiles.textContent = `KAIJU ${Math.max(0, Math.ceil(game.kaijuBoss?.currentHealth || 0))} HP`;
   } else {
     ui.hostiles.textContent = `${game.hostilesAlive} left / ${activeEnemyCount()} live`;
   }
@@ -5639,6 +6257,31 @@ function playTone(type) {
   osc.connect(gain);
   osc.start(now);
   osc.stop(now + 0.2);
+}
+
+function playKaijuRoar() {
+  if (!audio.unlocked || !audio.context) return;
+  const ctx = audio.context;
+  const now = ctx.currentTime;
+  const master = ctx.createGain();
+  master.gain.setValueAtTime(0.0001, now);
+  master.gain.exponentialRampToValueAtTime(0.15, now + 0.08);
+  master.gain.exponentialRampToValueAtTime(0.001, now + 1.15);
+  master.connect(ctx.destination);
+
+  for (const [type, startFreq, endFreq, offset] of [
+    ["sawtooth", 68, 28, 0],
+    ["square", 42, 23, 0.04],
+    ["triangle", 102, 36, 0.12]
+  ]) {
+    const osc = ctx.createOscillator();
+    osc.type = type;
+    osc.frequency.setValueAtTime(startFreq, now + offset);
+    osc.frequency.exponentialRampToValueAtTime(endFreq, now + 1.0);
+    osc.connect(master);
+    osc.start(now + offset);
+    osc.stop(now + 1.18);
+  }
 }
 
 function unlockAudio() {
@@ -5999,7 +6642,9 @@ function animate() {
 
   if (game.running && !game.ended && !game.calibrationOpen) {
     updateFinalBossSequence(dt);
+    updateAerialBossSequence(dt);
     updateRumaiaSequence(dt);
+    updateKaijuSequence(dt);
     if (game.bossPhase !== "cutscene") {
       if (online.enabled) {
         const local = localBundle();
@@ -6020,6 +6665,7 @@ function animate() {
 
   if (!game.calibrationOpen) {
     updateFireballs(dt);
+    updateAerialProjectiles(dt);
     updateParticles(dt);
     updateRewardBoxes(dt);
   }
