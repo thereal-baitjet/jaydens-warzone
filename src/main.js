@@ -72,6 +72,11 @@ const rumaiaHeight = 3.15;
 const rumaiaWidth = 2.35;
 const rumaiaHealth = 200;
 const rumaiaArrivalDelay = 10;
+const rumaiaRevengeHealth = 15000; // Change this value to rebalance RUMAIA Revenge HP.
+const rumaiaRevengeHeight = rumaiaHeight * 10; // Change this value to resize the 10x-tall revenge boss.
+const rumaiaRevengeWidth = rumaiaWidth * 7.6;
+const rumaiaRevengeTeleportDamage = 300; // Damage taken before she teleports.
+const rumaiaRevengeArrivalDelay = 4;
 const nuclearExplosionDuration = 3.8;
 const kaijuStormClearDelay = 5;
 const kaijuMaxHealth = 5000;
@@ -209,10 +214,14 @@ app.innerHTML = `
       </div>
       <div class="kaiju-health" data-ui="kaijuHealth" hidden>
         <div class="kaiju-health-header">
-          <span>KAIJU BOSS</span>
+          <span data-ui="bossHealthLabel">KAIJU BOSS</span>
           <strong data-ui="kaijuHealthValue">5000 / 5000</strong>
         </div>
         <div class="kaiju-health-track"><i data-ui="kaijuHealthBar"></i></div>
+      </div>
+      <div class="boss-intro-overlay" data-ui="bossIntro" hidden>
+        <h1 data-ui="bossIntroTitle">Boss Incoming</h1>
+        <h2 data-ui="bossIntroSubtitle">Prepare for engagement</h2>
       </div>
       <div class="message-feed" data-ui="feed"></div>
       <div class="music-unlock" data-ui="musicUnlock">
@@ -570,8 +579,12 @@ const ui = {
   hit: document.querySelector('[data-ui="hit"]'),
   damage: document.querySelector('[data-ui="damage"]'),
   kaijuHealth: document.querySelector('[data-ui="kaijuHealth"]'),
+  bossHealthLabel: document.querySelector('[data-ui="bossHealthLabel"]'),
   kaijuHealthBar: document.querySelector('[data-ui="kaijuHealthBar"]'),
   kaijuHealthValue: document.querySelector('[data-ui="kaijuHealthValue"]'),
+  bossIntro: document.querySelector('[data-ui="bossIntro"]'),
+  bossIntroTitle: document.querySelector('[data-ui="bossIntroTitle"]'),
+  bossIntroSubtitle: document.querySelector('[data-ui="bossIntroSubtitle"]'),
   health: document.querySelector('[data-ui="health"]'),
   armor: document.querySelector('[data-ui="armor"]'),
   stamina: document.querySelector('[data-ui="stamina"]'),
@@ -875,6 +888,10 @@ const game = {
   kaijuRoarAt: 0,
   kaijuOrigin: new THREE.Vector3(0, 0, -35),
   kaijuBoss: null,
+  rumaiaRevengePhase: "idle",
+  rumaiaRevengeSpawnAt: 0,
+  rumaiaRevengeSpawned: false,
+  rumaiaRevenge: null,
   messages: []
 };
 const introState = {
@@ -2390,57 +2407,69 @@ function createEnemy(type, position, seed) {
       material: shared.materials.powerOverdrive,
       harmless: true,
       rumaia: true
+    },
+    rumaiaRevenge: {
+      health: rumaiaRevengeHealth,
+      speed: 1.55,
+      fireRate: 0.48,
+      range: 115,
+      accuracy: 0.42,
+      damage: 9,
+      material: shared.materials.powerOverdrive,
+      rumaiaRevenge: true
     }
   }[type];
 
   const isBoss = Boolean(config.boss);
   const isAerialBoss = Boolean(config.aerialBoss);
   const isRumaia = Boolean(config.rumaia);
-  const hitboxHeight = isBoss ? finalBossHeight : isAerialBoss ? aerialBossHeight : isRumaia ? rumaiaHeight : 1.9;
-  const hitboxWidth = isBoss ? finalBossWidth : isAerialBoss ? aerialBossWidth : isRumaia ? rumaiaWidth : 1.72;
-  const spriteHeight = isBoss ? finalBossHeight : isAerialBoss ? aerialBossHeight : isRumaia ? rumaiaHeight : type === "commander" ? 4.2 : 3.88;
-  const spriteWidth = isBoss ? finalBossWidth : isAerialBoss ? aerialBossWidth : isRumaia ? rumaiaWidth : type === "commander" ? 4.15 : 3.72;
+  const isRumaiaRevenge = Boolean(config.rumaiaRevenge);
+  const hitboxHeight = isBoss ? finalBossHeight : isAerialBoss ? aerialBossHeight : isRumaiaRevenge ? rumaiaRevengeHeight : isRumaia ? rumaiaHeight : 1.9;
+  const hitboxWidth = isBoss ? finalBossWidth : isAerialBoss ? aerialBossWidth : isRumaiaRevenge ? rumaiaRevengeWidth : isRumaia ? rumaiaWidth : 1.72;
+  const spriteHeight = isBoss ? finalBossHeight : isAerialBoss ? aerialBossHeight : isRumaiaRevenge ? rumaiaRevengeHeight : isRumaia ? rumaiaHeight : type === "commander" ? 4.2 : 3.88;
+  const spriteWidth = isBoss ? finalBossWidth : isAerialBoss ? aerialBossWidth : isRumaiaRevenge ? rumaiaRevengeWidth : isRumaia ? rumaiaWidth : type === "commander" ? 4.15 : 3.72;
   const group = new THREE.Group();
   group.position.copy(position);
   scene.add(group);
 
-  const largeSpriteEnemy = isBoss || isAerialBoss || isRumaia;
+  const largeSpriteEnemy = isBoss || isAerialBoss || isRumaia || isRumaiaRevenge;
   const body = new THREE.Mesh(largeSpriteEnemy ? shared.geometries.box : shared.geometries.soldierBody, shared.materials.enemyHitbox);
   body.position.y = largeSpriteEnemy ? hitboxHeight * 0.5 : 1.0;
-  if (largeSpriteEnemy) body.scale.set(hitboxWidth * 0.82, hitboxHeight * 0.9, isRumaia ? 0.46 : isAerialBoss ? 0.58 : 0.72);
+  if (largeSpriteEnemy) body.scale.set(hitboxWidth * 0.82, hitboxHeight * 0.9, isRumaiaRevenge ? 1.35 : isRumaia ? 0.46 : isAerialBoss ? 0.58 : 0.72);
   body.castShadow = false;
   group.add(body);
 
   const head = new THREE.Mesh(shared.geometries.soldierHead, shared.materials.enemyHitbox);
-  head.position.y = isBoss ? finalBossHeight * 0.82 : isAerialBoss ? aerialBossHeight * 0.76 : isRumaia ? rumaiaHeight * 0.8 : 1.72;
+  head.position.y = isBoss ? finalBossHeight * 0.82 : isAerialBoss ? aerialBossHeight * 0.76 : isRumaiaRevenge ? rumaiaRevengeHeight * 0.8 : isRumaia ? rumaiaHeight * 0.8 : 1.72;
   if (isBoss) head.scale.setScalar(4.2);
   if (isAerialBoss) head.scale.setScalar(1.64);
+  if (isRumaiaRevenge) head.scale.setScalar(10.8);
   if (isRumaia) head.scale.setScalar(1.45);
   head.castShadow = false;
   group.add(head);
 
   const helmet = new THREE.Mesh(shared.geometries.soldierHead, shared.materials.enemyHitbox);
-  helmet.position.y = isBoss ? finalBossHeight * 0.88 : isAerialBoss ? aerialBossHeight * 0.86 : isRumaia ? rumaiaHeight * 0.87 : 1.83;
+  helmet.position.y = isBoss ? finalBossHeight * 0.88 : isAerialBoss ? aerialBossHeight * 0.86 : isRumaiaRevenge ? rumaiaRevengeHeight * 0.87 : isRumaia ? rumaiaHeight * 0.87 : 1.83;
   helmet.scale.set(
-    isBoss ? 4.55 : isAerialBoss ? 1.72 : isRumaia ? 1.56 : 1.08,
-    isBoss ? 2.1 : isAerialBoss ? 0.86 : isRumaia ? 0.82 : 0.56,
-    isBoss ? 4.55 : isAerialBoss ? 1.72 : isRumaia ? 1.56 : 1.08
+    isBoss ? 4.55 : isAerialBoss ? 1.72 : isRumaiaRevenge ? 11.5 : isRumaia ? 1.56 : 1.08,
+    isBoss ? 2.1 : isAerialBoss ? 0.86 : isRumaiaRevenge ? 6.1 : isRumaia ? 0.82 : 0.56,
+    isBoss ? 4.55 : isAerialBoss ? 1.72 : isRumaiaRevenge ? 11.5 : isRumaia ? 1.56 : 1.08
   );
   helmet.castShadow = false;
   group.add(helmet);
 
   const leftWing = new THREE.Mesh(shared.geometries.box, shared.materials.enemyHitbox);
-  leftWing.position.set(isBoss ? -finalBossWidth * 0.33 : isAerialBoss ? -aerialBossWidth * 0.34 : isRumaia ? -rumaiaWidth * 0.28 : -0.72, isBoss ? finalBossHeight * 0.5 : isAerialBoss ? aerialBossHeight * 0.52 : isRumaia ? rumaiaHeight * 0.5 : 1.55, 0);
-  leftWing.scale.set(isBoss ? finalBossWidth * 0.38 : isAerialBoss ? aerialBossWidth * 0.4 : isRumaia ? rumaiaWidth * 0.38 : 0.86, isBoss ? finalBossHeight * 0.86 : isAerialBoss ? aerialBossHeight * 0.76 : isRumaia ? rumaiaHeight * 0.72 : 1.28, isBoss ? 0.62 : isAerialBoss ? 0.42 : isRumaia ? 0.36 : 0.22);
+  leftWing.position.set(isBoss ? -finalBossWidth * 0.33 : isAerialBoss ? -aerialBossWidth * 0.34 : isRumaiaRevenge ? -rumaiaRevengeWidth * 0.28 : isRumaia ? -rumaiaWidth * 0.28 : -0.72, isBoss ? finalBossHeight * 0.5 : isAerialBoss ? aerialBossHeight * 0.52 : isRumaiaRevenge ? rumaiaRevengeHeight * 0.5 : isRumaia ? rumaiaHeight * 0.5 : 1.55, 0);
+  leftWing.scale.set(isBoss ? finalBossWidth * 0.38 : isAerialBoss ? aerialBossWidth * 0.4 : isRumaiaRevenge ? rumaiaRevengeWidth * 0.38 : isRumaia ? rumaiaWidth * 0.38 : 0.86, isBoss ? finalBossHeight * 0.86 : isAerialBoss ? aerialBossHeight * 0.76 : isRumaiaRevenge ? rumaiaRevengeHeight * 0.72 : isRumaia ? rumaiaHeight * 0.72 : 1.28, isBoss ? 0.62 : isAerialBoss ? 0.42 : isRumaiaRevenge ? 1.1 : isRumaia ? 0.36 : 0.22);
   group.add(leftWing);
 
   const rightWing = new THREE.Mesh(shared.geometries.box, shared.materials.enemyHitbox);
-  rightWing.position.set(isBoss ? finalBossWidth * 0.33 : isAerialBoss ? aerialBossWidth * 0.34 : isRumaia ? rumaiaWidth * 0.28 : 0.72, isBoss ? finalBossHeight * 0.5 : isAerialBoss ? aerialBossHeight * 0.52 : isRumaia ? rumaiaHeight * 0.5 : 1.55, 0);
-  rightWing.scale.set(isBoss ? finalBossWidth * 0.38 : isAerialBoss ? aerialBossWidth * 0.4 : isRumaia ? rumaiaWidth * 0.38 : 0.86, isBoss ? finalBossHeight * 0.86 : isAerialBoss ? aerialBossHeight * 0.76 : isRumaia ? rumaiaHeight * 0.72 : 1.28, isBoss ? 0.62 : isAerialBoss ? 0.42 : isRumaia ? 0.36 : 0.22);
+  rightWing.position.set(isBoss ? finalBossWidth * 0.33 : isAerialBoss ? aerialBossWidth * 0.34 : isRumaiaRevenge ? rumaiaRevengeWidth * 0.28 : isRumaia ? rumaiaWidth * 0.28 : 0.72, isBoss ? finalBossHeight * 0.5 : isAerialBoss ? aerialBossHeight * 0.52 : isRumaiaRevenge ? rumaiaRevengeHeight * 0.5 : isRumaia ? rumaiaHeight * 0.5 : 1.55, 0);
+  rightWing.scale.set(isBoss ? finalBossWidth * 0.38 : isAerialBoss ? aerialBossWidth * 0.4 : isRumaiaRevenge ? rumaiaRevengeWidth * 0.38 : isRumaia ? rumaiaWidth * 0.38 : 0.86, isBoss ? finalBossHeight * 0.86 : isAerialBoss ? aerialBossHeight * 0.76 : isRumaiaRevenge ? rumaiaRevengeHeight * 0.72 : isRumaia ? rumaiaHeight * 0.72 : 1.28, isBoss ? 0.62 : isAerialBoss ? 0.42 : isRumaiaRevenge ? 1.1 : isRumaia ? 0.36 : 0.22);
   group.add(rightWing);
 
   const spriteMaterial = new THREE.MeshBasicMaterial({
-    map: isBoss ? shared.bossSpriteTextures.idle : isAerialBoss ? shared.aerialBossSpriteTextures.glide[0] : isRumaia ? shared.rumaiaSpriteTextures[0] : shared.enemySpriteTextures[0],
+    map: isBoss ? shared.bossSpriteTextures.idle : isAerialBoss ? shared.aerialBossSpriteTextures.glide[0] : isRumaia || isRumaiaRevenge ? shared.rumaiaSpriteTextures[0] : shared.enemySpriteTextures[0],
     transparent: true,
     alphaTest: 0.08,
     side: THREE.DoubleSide,
@@ -2476,9 +2505,10 @@ function createEnemy(type, position, seed) {
     boss: isBoss,
     aerialBoss: isAerialBoss,
     rumaia: isRumaia,
+    rumaiaRevenge: isRumaiaRevenge,
     harmless: Boolean(config.harmless),
-    eyeHeight: isBoss ? finalBossHeight * 0.72 : isAerialBoss ? aerialBossHeight * 0.7 : isRumaia ? rumaiaHeight * 0.72 : 1.55,
-    targetHeight: isBoss ? finalBossHeight * 0.48 : isAerialBoss ? aerialBossHeight * 0.5 : isRumaia ? rumaiaHeight * 0.52 : 1.22,
+    eyeHeight: isBoss ? finalBossHeight * 0.72 : isAerialBoss ? aerialBossHeight * 0.7 : isRumaiaRevenge ? rumaiaRevengeHeight * 0.72 : isRumaia ? rumaiaHeight * 0.72 : 1.55,
+    targetHeight: isBoss ? finalBossHeight * 0.48 : isAerialBoss ? aerialBossHeight * 0.5 : isRumaiaRevenge ? rumaiaRevengeHeight * 0.52 : isRumaia ? rumaiaHeight * 0.52 : 1.22,
     seed,
     state: "patrol",
     target: position.clone(),
@@ -2497,7 +2527,9 @@ function createEnemy(type, position, seed) {
     modeUntil: game.time + randomRange(seed + 41, 1.8, 3.2),
     dashUntil: -10,
     dashVector: new THREE.Vector3(),
-    trailAt: 0
+    trailAt: 0,
+    damageSinceTeleport: 0,
+    lastTeleportAt: -10
   };
 
   body.userData.enemy = enemy;
@@ -2730,7 +2762,7 @@ function nearestPlayerTarget(position) {
 function updateSpawnDirector() {
   if (!game.running || spawnQueue.length === 0) return;
   if (game.bossPhase !== "idle") return;
-  if (game.aerialBossPhase !== "idle" || game.rumaiaPhase !== "idle" || game.kaijuPhase !== "idle") return;
+  if (game.aerialBossPhase !== "idle" || game.rumaiaPhase !== "idle" || game.kaijuPhase !== "idle" || game.rumaiaRevengePhase !== "idle") return;
 
   const completedPrimary = objectives.filter((objective) => !objective.extraction && objective.complete).length;
   const active = activeEnemyCount();
@@ -2777,7 +2809,7 @@ function moveWithCollisions(position, delta, radius = 0.42) {
 
 function enemyMoveWithCollisions(enemy, velocity, dt) {
   const previous = enemy.group.position.clone();
-  moveWithCollisions(enemy.group.position, velocity.clone().multiplyScalar(dt), enemy.boss ? 1.25 : 0.38);
+  moveWithCollisions(enemy.group.position, velocity.clone().multiplyScalar(dt), enemy.boss || enemy.rumaiaRevenge ? 1.25 : 0.38);
   const moved = enemy.group.position.distanceToSquared(previous);
   if (moved < 0.0003) {
     enemy.stuckTimer += dt;
@@ -4427,6 +4459,13 @@ function damageEnemy(enemy, damage, headshot = false, source = "rifle") {
   enemy.health -= damage;
   enemy.state = "alert";
   enemy.lastSeen = player.feet.clone();
+  if (enemy.rumaiaRevenge && enemy.health > 0) {
+    enemy.damageSinceTeleport += damage;
+    if (enemy.damageSinceTeleport >= rumaiaRevengeTeleportDamage) {
+      enemy.damageSinceTeleport = 0;
+      teleportRumaiaRevenge(enemy);
+    }
+  }
   if (enemy.health <= 0 && enemy.alive) {
     enemy.alive = false;
     game.hostilesAlive -= 1;
@@ -4455,6 +4494,15 @@ function damageEnemy(enemy, damage, headshot = false, source = "rifle") {
       game.objectiveMessage = "RUMAIA absorbed 200 damage. Nuclear bloom triggered.";
       addMessage("RUMAIA took 200 damage. Nuclear bloom triggered.");
       triggerNuclearExplosion(enemy.group.position.clone());
+      return;
+    }
+    if (enemy.rumaiaRevenge) {
+      game.rumaiaRevengePhase = "defeated";
+      game.rumaiaRevenge = enemy;
+      game.objectiveMessage = "RUMAIA Revenge defeated. Opening victory video.";
+      addMessage("RUMAIA Revenge is down. Final extraction video opening.");
+      updateKaijuHealthUi();
+      scheduleVictoryRedirect();
       return;
     }
     const label = source === "melee"
@@ -4486,12 +4534,30 @@ function setBossCutsceneVisible(visible) {
   }, 420);
 }
 
+function showBossIntro(title, subtitle, duration = 2800) {
+  if (!ui.bossIntro || !ui.bossIntroTitle || !ui.bossIntroSubtitle) return;
+  ui.bossIntroTitle.textContent = title;
+  ui.bossIntroSubtitle.textContent = subtitle;
+  ui.bossIntro.hidden = false;
+  ui.bossIntro.classList.remove("visible");
+  void ui.bossIntro.offsetWidth;
+  ui.bossIntro.classList.add("visible");
+  window.clearTimeout(showBossIntro.timeout);
+  showBossIntro.timeout = window.setTimeout(() => {
+    ui.bossIntro.classList.remove("visible");
+    window.setTimeout(() => {
+      if (!ui.bossIntro.classList.contains("visible")) ui.bossIntro.hidden = true;
+    }, 240);
+  }, duration);
+}
+
 function startFinalBossSequence() {
   if (game.bossPhase !== "idle" || game.bossSpawned || game.bossDefeated) return;
   game.bossPhase = "cutscene";
   game.bossIntroUntil = game.time + finalBossIntroDuration;
   game.objectiveMessage = "Korsak inbound. Commander-class final boss detected.";
   setBossCutsceneVisible(true);
+  showBossIntro("KORSAK", "Commander-class final boss inbound");
   addMessage("All 100 hostiles down. Korsak is entering the battlespace.");
   playTone("objective");
 }
@@ -4515,6 +4581,7 @@ function spawnAerialBoss() {
   boss.aimYaw = Math.PI;
   game.aerialBoss = boss;
   game.objectiveMessage = "Aerial boss inbound. Track the swimming flight and shoot the full sprite.";
+  showBossIntro("AERIAL BOSS", "Sky-swimming assault pattern active");
   addMessage("Aerial boss is airborne. Dodge spin blades, swing arcs, and dash attacks.");
   playTone("objective");
 }
@@ -4546,6 +4613,7 @@ function spawnRumaia() {
   rumaia.aimYaw = Math.PI;
   game.rumaia = rumaia;
   game.objectiveMessage = "RUMAIA is harmless. Deal 200 damage to trigger the final blast.";
+  showBossIntro("RUMAIA", "Harmless arrival. Damage triggers nuclear bloom");
   addMessage("RUMAIA appeared. She will not attack, but 200 damage detonates the map.");
   playTone("objective");
 }
@@ -4693,6 +4761,7 @@ function spawnKaijuBoss() {
   renderer.toneMappingExposure = 1.08;
   scene.fog.density = 0.009;
   game.objectiveMessage = "KAIJU BOSS active. 5000 HP. Shoot the huge sprite and dodge fireballs.";
+  showBossIntro("KAIJU BOSS", "5000 HP. Slow advance. Fireball barrage");
   addMessage("KAIJU BOSS emerged. 5000 HP. Fireballs incoming.");
   playTone("objective");
 }
@@ -4705,11 +4774,11 @@ function handleKaijuDefeated(boss) {
   }
   game.kaijuPhase = "defeated";
   game.hostilesAlive = 0;
-  game.objectiveMessage = "KAIJU BOSS defeated. Opening victory video.";
-  addMessage("KAIJU BOSS defeated. Final extraction video opening.");
+  game.objectiveMessage = `KAIJU BOSS defeated. RUMAIA Revenge returns in ${rumaiaRevengeArrivalDelay}s.`;
+  addMessage(`KAIJU BOSS defeated. RUMAIA Revenge returns in ${rumaiaRevengeArrivalDelay}s.`);
   updateKaijuHealthUi();
   playTone("kill");
-  scheduleVictoryRedirect();
+  scheduleRumaiaRevengeArrival();
 }
 
 function updateKaijuSequence(dt) {
@@ -4733,6 +4802,77 @@ function updateKaijuSequence(dt) {
   if (game.kaijuPhase !== "active" || !game.kaijuBoss) return;
   game.kaijuBoss.update(dt, activePlayers(), camera);
   game.objectiveMessage = `KAIJU BOSS: ${Math.ceil(game.kaijuBoss.currentHealth)} / ${game.kaijuBoss.maxHealth} HP. Dodge fireballs.`;
+}
+
+function scheduleRumaiaRevengeArrival() {
+  if (game.rumaiaRevengePhase !== "idle") return;
+  game.rumaiaRevengePhase = "waiting";
+  game.rumaiaRevengeSpawnAt = game.time + rumaiaRevengeArrivalDelay;
+}
+
+function spawnRumaiaRevenge() {
+  if (game.rumaiaRevengeSpawned) return;
+  game.rumaiaRevengeSpawned = true;
+  game.rumaiaRevengePhase = "active";
+  game.hostilesAlive = 1;
+  game.totalHostiles += 1;
+  // Spawn point for the 10x-tall revenge boss. Move this vector to relocate her.
+  const revenge = createEnemy("rumaiaRevenge", new THREE.Vector3(12, 0, -42), game.spawnSeed + 14001);
+  revenge.state = "advance";
+  revenge.lastSeen = nearestPlayerTarget(revenge.group.position).actor.feet.clone();
+  revenge.fireTimer = 0.55;
+  revenge.aimYaw = Math.PI;
+  game.rumaiaRevenge = revenge;
+  game.objectiveMessage = "RUMAIA REVENGE active. 15000 HP. She teleports every 300 damage and fires back.";
+  showBossIntro("RUMAIA REVENGE", "10x tall. 15000 HP. Teleports after 300 damage");
+  addMessage("RUMAIA Revenge returned with a gun. Every 300 damage forces a teleport.");
+  playTone("objective");
+}
+
+function updateRumaiaRevengeSequence() {
+  if (game.rumaiaRevengePhase === "waiting") {
+    const remaining = Math.max(0, Math.ceil(game.rumaiaRevengeSpawnAt - game.time));
+    game.objectiveMessage = `RUMAIA Revenge returns in ${remaining}s. Reload before she comes back armed.`;
+    if (game.time >= game.rumaiaRevengeSpawnAt) {
+      spawnRumaiaRevenge();
+    }
+    return;
+  }
+
+  if (game.rumaiaRevengePhase === "active" && game.rumaiaRevenge?.alive) {
+    game.objectiveMessage = `RUMAIA REVENGE: ${Math.ceil(game.rumaiaRevenge.health)} / ${rumaiaRevengeHealth} HP. Teleport threshold: ${Math.ceil(rumaiaRevengeTeleportDamage - game.rumaiaRevenge.damageSinceTeleport)}.`;
+  }
+}
+
+function rumaiaRevengeTeleportPosition(enemy) {
+  const target = nearestPlayerTarget(enemy.group.position).actor.feet;
+  const seed = enemy.seed + Math.floor(game.time * 941);
+  const angle = randomRange(seed, 0, Math.PI * 2);
+  const radius = randomRange(seed + 3, 30, 52);
+  return new THREE.Vector3(
+    clamp(target.x + Math.cos(angle) * radius, -88, 88),
+    0,
+    clamp(target.z + Math.sin(angle) * radius, -88, 88)
+  );
+}
+
+function teleportRumaiaRevenge(enemy) {
+  if (!enemy.alive || game.time - enemy.lastTeleportAt < 0.32) return;
+  enemy.lastTeleportAt = game.time;
+  const from = enemy.group.position.clone();
+  const next = rumaiaRevengeTeleportPosition(enemy);
+  addTemporarySmokeColumn(from, 6, 2.8);
+  addTemporarySmokeColumn(next, 8, 3.2);
+  spawnImpact(from.clone().add(new THREE.Vector3(0, 1, 0)));
+  spawnImpact(next.clone().add(new THREE.Vector3(0, 1, 0)));
+  enemy.group.position.copy(next);
+  enemy.target.copy(next);
+  enemy.lastSeen = nearestPlayerTarget(next).actor.feet.clone();
+  enemy.fireTimer = Math.min(enemy.fireTimer, 0.18);
+  if (game.time - (enemy.lastTeleportMessageAt || -10) > 1.1) {
+    enemy.lastTeleportMessageAt = game.time;
+    addMessage("RUMAIA Revenge teleported after taking 300 damage.");
+  }
 }
 
 function createBossPlane() {
@@ -4871,6 +5011,19 @@ function collapseEnemy(enemy) {
     enemy.sprite.scale.set(aerialBossWidth * 1.4, aerialBossHeight * 0.64, 1);
     return;
   }
+  if (enemy.rumaiaRevenge) {
+    enemy.group.position.y = 0.32;
+    enemy.group.rotation.set(Math.PI / 2, yaw, randomRange(enemy.seed, -0.2, 0.2));
+    enemy.group.scale.set(1.02, 0.9, 1.02);
+    enemy.spriteMaterial.map = shared.rumaiaSpriteTextures[0];
+    enemy.spriteMaterial.color.set(0xff8dff);
+    enemy.spriteMaterial.opacity = 0.86;
+    enemy.spriteMaterial.needsUpdate = true;
+    enemy.sprite.position.copy(enemy.group.position).add(new THREE.Vector3(0, -0.18, 0));
+    enemy.sprite.rotation.set(-Math.PI / 2, 0, yaw + randomRange(enemy.seed + 3, -0.18, 0.18));
+    enemy.sprite.scale.set(rumaiaRevengeWidth * 1.22, rumaiaRevengeHeight * 0.6, 1);
+    return;
+  }
   if (enemy.rumaia) {
     enemy.group.position.y = 0.18;
     enemy.group.rotation.set(Math.PI / 2, yaw, randomRange(enemy.seed, -0.25, 0.25));
@@ -4950,6 +5103,24 @@ function updateEnemyVisual(enemy, view = camera) {
     enemy.sprite.position.copy(enemy.group.position).add(new THREE.Vector3(0, aerialBossHeight * 0.5 + bob, 0));
     enemy.sprite.lookAt(view.position.x, enemy.sprite.position.y, view.position.z);
     enemy.sprite.scale.set(aerialBossWidth * pulse, aerialBossHeight * pulse, 1);
+    return;
+  }
+
+  if (enemy.rumaiaRevenge) {
+    const index = enemySpriteIndex(enemy, view);
+    const nextMap = shared.rumaiaSpriteTextures[index] || shared.rumaiaSpriteTextures[0];
+    if (index !== enemy.currentSpriteIndex || enemy.spriteMaterial.map !== nextMap) {
+      enemy.currentSpriteIndex = index;
+      enemy.spriteMaterial.map = nextMap;
+      enemy.spriteMaterial.needsUpdate = true;
+    }
+    const firing = game.time < enemy.breathUntil;
+    const bob = Math.sin(game.time * 1.65 + enemy.seed) * 0.18;
+    const pulse = firing ? 1.045 + Math.sin(game.time * 30) * 0.018 : 1 + Math.sin(game.time * 2.3) * 0.012;
+    enemy.spriteMaterial.color.set(firing ? 0xffd0ff : 0xffffff);
+    enemy.sprite.position.copy(enemy.group.position).add(new THREE.Vector3(0, rumaiaRevengeHeight * 0.5 + bob, 0));
+    enemy.sprite.lookAt(view.position.x, enemy.sprite.position.y, view.position.z);
+    enemy.sprite.scale.set(rumaiaRevengeWidth * pulse, rumaiaRevengeHeight * pulse, 1);
     return;
   }
 
@@ -5213,6 +5384,57 @@ function spawnBossLaser(enemy, target, distance) {
   if (game.time - (enemy.lastLaserMessageAt || -10) > 1.8) {
     enemy.lastLaserMessageAt = game.time;
     addMessage("Korsak laser hit. Use cover to break the beam.");
+  }
+}
+
+function spawnRumaiaGunfire(enemy, target, distance) {
+  const forward = new THREE.Vector3(Math.sin(enemy.aimYaw), 0, Math.cos(enemy.aimYaw));
+  const start = enemy.group.position.clone()
+    .addScaledVector(forward, rumaiaRevengeWidth * 0.24)
+    .add(new THREE.Vector3(0, rumaiaRevengeHeight * 0.56, 0));
+  const aimPoint = target.actor.feet.clone().add(new THREE.Vector3(0, target.actor.height * 0.62, 0));
+  const jammerPenalty = game.time < target.actor.jammerUntil ? 1.8 : 1;
+  const missRadius = clamp((1 - enemy.config.accuracy) * distance * 0.014 * jammerPenalty, 0.08, 1.35);
+  const seed = enemy.seed + Math.floor(game.time * 1567);
+  aimPoint.x += randomRange(seed + 1, -missRadius, missRadius);
+  aimPoint.y += randomRange(seed + 2, -missRadius * 0.22, missRadius * 0.35);
+  aimPoint.z += randomRange(seed + 3, -missRadius, missRadius);
+
+  const direction = aimPoint.clone().sub(start).normalize();
+  raycaster.set(start, direction);
+  raycaster.far = enemy.config.range;
+  const solidHit = raycaster.intersectObjects(solidMeshes, false)[0];
+  raycaster.far = 160;
+  const endpoint = solidHit ? solidHit.point.clone() : start.clone().addScaledVector(direction, enemy.config.range);
+  spawnTracer(start, endpoint, 0xffd36b);
+  spawnLaserImpact(endpoint);
+
+  const muzzle = new THREE.Mesh(
+    shared.geometries.sphere,
+    new THREE.MeshBasicMaterial({
+      color: 0xffd36b,
+      transparent: true,
+      opacity: 0.86,
+      depthWrite: false
+    })
+  );
+  muzzle.position.copy(start);
+  muzzle.scale.setScalar(0.34);
+  scene.add(muzzle);
+  particles.push({ mesh: muzzle, type: "impact", age: 0, life: 0.16 });
+
+  const hitActor = activePlayers().find((actor) => {
+    if (actor.downed) return false;
+    const center = actor.feet.clone().add(new THREE.Vector3(0, actor.height * 0.58, 0));
+    return distancePointToSegmentSquared(center, start, endpoint) < 0.52 ** 2;
+  });
+  if (!hitActor) return;
+
+  setActivePlayer(hitActor, cameraForRole(hitActor.role), padForLocalActor(hitActor));
+  damagePlayer(enemy.config.damage);
+  if (game.time - (enemy.lastGunMessageAt || -10) > 1.8) {
+    enemy.lastGunMessageAt = game.time;
+    addMessage("RUMAIA Revenge gunfire hit. Use cover between teleports.");
   }
 }
 
@@ -5609,6 +5831,11 @@ function decideEnemyState(enemy, distance, seesPlayer) {
     return;
   }
 
+  if (enemy.rumaiaRevenge) {
+    enemy.state = distance > 38 ? "advance" : seededRandom(enemy.seed + Math.floor(game.time * 5)) > 0.45 ? "flank" : "retreat";
+    return;
+  }
+
   if (!enemy.lastSeen && !seesPlayer) {
     enemy.state = "patrol";
     return;
@@ -5670,6 +5897,8 @@ function enemyFire(enemy, distance) {
   enemy.breathUntil = game.time + (enemy.boss ? 0.62 : 0.46);
   if (enemy.boss) {
     spawnBossLaser(enemy, target, distance);
+  } else if (enemy.rumaiaRevenge) {
+    spawnRumaiaGunfire(enemy, target, distance);
   } else {
     spawnEnemyFireball(enemy, target, distance);
   }
@@ -5789,7 +6018,8 @@ function updateObjectives(input, dt) {
   const finalSequenceBlocksExtraction = game.bossPhase !== "idle"
     || game.aerialBossPhase !== "idle"
     || game.rumaiaPhase !== "idle"
-    || (game.kaijuPhase !== "idle" && game.kaijuPhase !== "defeated");
+    || (game.kaijuPhase !== "idle" && game.kaijuPhase !== "defeated")
+    || (game.rumaiaRevengePhase !== "idle" && game.rumaiaRevengePhase !== "defeated");
 
   for (const objective of objectives) {
     if (objective.extraction && (completedPrimary < 3 || game.hostilesAlive > 0 || finalSequenceBlocksExtraction)) {
@@ -5847,6 +6077,11 @@ function updateObjectives(input, dt) {
     game.objectiveMessage = `Storm clearing. Kaiju contact in ${remaining}s.`;
   } else if (game.kaijuPhase === "active") {
     game.objectiveMessage = `KAIJU BOSS: ${Math.ceil(game.kaijuBoss?.currentHealth || 0)} / ${kaijuMaxHealth} HP. Dodge fireballs.`;
+  } else if (game.rumaiaRevengePhase === "waiting") {
+    const remaining = Math.max(0, Math.ceil(game.rumaiaRevengeSpawnAt - game.time));
+    game.objectiveMessage = `RUMAIA Revenge returns in ${remaining}s.`;
+  } else if (game.rumaiaRevengePhase === "active") {
+    game.objectiveMessage = `RUMAIA REVENGE: ${Math.ceil(game.rumaiaRevenge?.health || 0)} / ${rumaiaRevengeHealth} HP. Teleports every 300 damage.`;
   } else if (game.bossPhase === "cutscene") {
     game.objectiveMessage = "Korsak inbound. Watch the commander-class cutscene.";
   } else if (game.bossPhase === "crash") {
@@ -6109,12 +6344,22 @@ function updateSplitGauges() {
 }
 
 function updateKaijuHealthUi() {
-  if (!ui.kaijuHealth || !ui.kaijuHealthBar || !ui.kaijuHealthValue) return;
-  const boss = game.kaijuBoss;
-  const visible = game.kaijuPhase === "active" && boss?.alive;
+  if (!ui.kaijuHealth || !ui.kaijuHealthBar || !ui.kaijuHealthValue || !ui.bossHealthLabel) return;
+  const kaijuVisible = game.kaijuPhase === "active" && game.kaijuBoss?.alive;
+  const revengeVisible = game.rumaiaRevengePhase === "active" && game.rumaiaRevenge?.alive;
+  const visible = kaijuVisible || revengeVisible;
   ui.kaijuHealth.hidden = !visible;
   if (!visible) return;
+  if (revengeVisible) {
+    const current = Math.max(0, Math.ceil(game.rumaiaRevenge.health));
+    ui.bossHealthLabel.textContent = "RUMAIA REVENGE";
+    ui.kaijuHealthValue.textContent = `${current} / ${rumaiaRevengeHealth}`;
+    ui.kaijuHealthBar.style.width = `${clamp(current / rumaiaRevengeHealth, 0, 1) * 100}%`;
+    return;
+  }
+  const boss = game.kaijuBoss;
   const current = Math.max(0, Math.ceil(boss.currentHealth));
+  ui.bossHealthLabel.textContent = "KAIJU BOSS";
   ui.kaijuHealthValue.textContent = `${current} / ${boss.maxHealth}`;
   ui.kaijuHealthBar.style.width = `${boss.healthRatio * 100}%`;
 }
@@ -6140,6 +6385,10 @@ function updateHUD() {
     ui.hostiles.textContent = `KAIJU in ${Math.max(0, Math.ceil(game.kaijuSpawnAt - game.time))}s`;
   } else if (game.kaijuPhase === "active") {
     ui.hostiles.textContent = `KAIJU ${Math.max(0, Math.ceil(game.kaijuBoss?.currentHealth || 0))} HP`;
+  } else if (game.rumaiaRevengePhase === "waiting") {
+    ui.hostiles.textContent = `REVENGE in ${Math.max(0, Math.ceil(game.rumaiaRevengeSpawnAt - game.time))}s`;
+  } else if (game.rumaiaRevengePhase === "active") {
+    ui.hostiles.textContent = `REVENGE ${Math.max(0, Math.ceil(game.rumaiaRevenge?.health || 0))} HP`;
   } else {
     ui.hostiles.textContent = `${game.hostilesAlive} left / ${activeEnemyCount()} live`;
   }
@@ -6645,6 +6894,7 @@ function animate() {
     updateAerialBossSequence(dt);
     updateRumaiaSequence(dt);
     updateKaijuSequence(dt);
+    updateRumaiaRevengeSequence(dt);
     if (game.bossPhase !== "cutscene") {
       if (online.enabled) {
         const local = localBundle();
