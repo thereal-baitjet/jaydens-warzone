@@ -496,12 +496,16 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.05;
+const EXPOSURE_BASE = 1.08;
+const EXPOSURE_NIGHT_VISION = 1.55;
+const EXPOSURE_STORM_PEAK = 1.35;
+const EXPOSURE_NUKE_FLASH_BOOST = 1.35;
+renderer.toneMappingExposure = EXPOSURE_BASE;
 shell.prepend(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x8ea0a0);
-scene.fog = new THREE.FogExp2(0xb7aa8c, 0.0085);
+scene.background = new THREE.Color(0xa3946f);
+scene.fog = new THREE.FogExp2(0xcdab78, 0.0078);
 
 let camera = new THREE.PerspectiveCamera(78, window.innerWidth / window.innerHeight, 0.06, 420);
 camera.rotation.order = "YXZ";
@@ -1589,7 +1593,12 @@ function createSharedAssets() {
     metalGreen: new THREE.MeshStandardMaterial({ color: 0x364637, roughness: 0.68, metalness: 0.18 }),
     metalTan: new THREE.MeshStandardMaterial({ color: 0x8a7956, roughness: 0.72, metalness: 0.1 }),
     metalDark: new THREE.MeshStandardMaterial({ color: 0x1f2421, roughness: 0.72, metalness: 0.25 }),
-    warning: new THREE.MeshStandardMaterial({ color: 0xf2c46b, roughness: 0.42, emissive: 0x3a2608 }),
+    warning: new THREE.MeshStandardMaterial({
+      color: 0xf2c46b,
+      roughness: 0.42,
+      emissive: 0x3a2608,
+      emissiveIntensity: 1.8
+    }),
     playerBlue: new THREE.MeshStandardMaterial({ color: 0x89b7ff, roughness: 0.55 }),
     enemyRifle: new THREE.MeshStandardMaterial({ color: 0x5c614e, roughness: 0.74 }),
     enemyBreacher: new THREE.MeshStandardMaterial({ color: 0x6b4c3a, roughness: 0.74 }),
@@ -1597,7 +1606,7 @@ function createSharedAssets() {
     enemySupport: new THREE.MeshStandardMaterial({ color: 0x725f35, roughness: 0.74 }),
     enemyCommander: new THREE.MeshStandardMaterial({ color: 0x7b2f2f, roughness: 0.68 }),
     bossPlane: new THREE.MeshStandardMaterial({ color: 0x1c2b36, roughness: 0.58, metalness: 0.32 }),
-    bossLaser: new THREE.MeshBasicMaterial({ color: 0x5ae7ff, transparent: true, opacity: 0.9 }),
+    bossLaser: new THREE.MeshBasicMaterial({ color: 0x8af2ff, transparent: true, opacity: 0.95 }),
     aerialWater: new THREE.MeshBasicMaterial({
       color: 0x63ffe5,
       transparent: true,
@@ -1627,13 +1636,43 @@ function createSharedAssets() {
       transparent: true,
       opacity: 0.55
     }),
-    powerHealth: new THREE.MeshStandardMaterial({ color: 0x86d680, roughness: 0.3, emissive: 0x173a18 }),
-    powerArmor: new THREE.MeshStandardMaterial({ color: 0x89b7ff, roughness: 0.3, emissive: 0x132743 }),
-    powerStamina: new THREE.MeshStandardMaterial({ color: 0xf2c46b, roughness: 0.28, emissive: 0x4a2f06 }),
-    powerJammer: new THREE.MeshStandardMaterial({ color: 0x70e6d1, roughness: 0.22, emissive: 0x073b35 }),
-    powerOverdrive: new THREE.MeshStandardMaterial({ color: 0xff8a5c, roughness: 0.25, emissive: 0x4a1205 }),
-    rewardBox: new THREE.MeshStandardMaterial({ color: 0xd9f25c, roughness: 0.34, emissive: 0x4a5208 }),
-    rewardBoxCore: new THREE.MeshBasicMaterial({ color: 0xf2c46b }),
+    powerHealth: new THREE.MeshStandardMaterial({
+      color: 0x86d680,
+      roughness: 0.3,
+      emissive: 0x173a18,
+      emissiveIntensity: 2
+    }),
+    powerArmor: new THREE.MeshStandardMaterial({
+      color: 0x89b7ff,
+      roughness: 0.3,
+      emissive: 0x132743,
+      emissiveIntensity: 2
+    }),
+    powerStamina: new THREE.MeshStandardMaterial({
+      color: 0xf2c46b,
+      roughness: 0.28,
+      emissive: 0x4a2f06,
+      emissiveIntensity: 2
+    }),
+    powerJammer: new THREE.MeshStandardMaterial({
+      color: 0x70e6d1,
+      roughness: 0.22,
+      emissive: 0x073b35,
+      emissiveIntensity: 2.2
+    }),
+    powerOverdrive: new THREE.MeshStandardMaterial({
+      color: 0xff8a5c,
+      roughness: 0.25,
+      emissive: 0x4a1205,
+      emissiveIntensity: 2.2
+    }),
+    rewardBox: new THREE.MeshStandardMaterial({
+      color: 0xd9f25c,
+      roughness: 0.34,
+      emissive: 0x4a5208,
+      emissiveIntensity: 1.8
+    }),
+    rewardBoxCore: new THREE.MeshBasicMaterial({ color: 0xffd98a }),
     smoke: new THREE.MeshBasicMaterial({
       color: 0x7b776d,
       transparent: true,
@@ -1677,10 +1716,10 @@ function createSharedAssets() {
 }
 
 function addLights() {
-  const hemi = new THREE.HemisphereLight(0xe7ebd8, 0x433b2f, 1.6);
+  const hemi = new THREE.HemisphereLight(0xfff0d2, 0x2c2f42, 1.55);
   scene.add(hemi);
 
-  const sun = new THREE.DirectionalLight(0xffe4ad, 3.2);
+  const sun = new THREE.DirectionalLight(0xffcf8e, 3.4);
   sun.position.set(-32, 52, 20);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
@@ -1692,7 +1731,11 @@ function addLights() {
   sun.shadow.camera.bottom = -90;
   scene.add(sun);
 
-  const amber = new THREE.PointLight(0xffb34f, 2.5, 34, 2);
+  const skyFill = new THREE.DirectionalLight(0x6f86c9, 0.55);
+  skyFill.position.set(34, 28, -26);
+  scene.add(skyFill);
+
+  const amber = new THREE.PointLight(0xffb34f, 2.8, 34, 2);
   amber.position.set(-55, 5, -45);
   scene.add(amber);
 }
@@ -1980,7 +2023,7 @@ function addObjectiveMarker(objective) {
   const column = new THREE.Mesh(shared.geometries.cylinder, new THREE.MeshBasicMaterial({
     color: objective.extraction ? 0x89b7ff : 0xf2c46b,
     transparent: true,
-    opacity: 0.11,
+    opacity: 0.16,
     depthWrite: false
   }));
   column.position.copy(objective.position).add(new THREE.Vector3(0, 2.5, 0));
@@ -2035,7 +2078,7 @@ function addPowerUp(type, position) {
     new THREE.MeshBasicMaterial({
       color: config.color,
       transparent: true,
-      opacity: 0.13,
+      opacity: 0.19,
       depthWrite: false
     })
   );
@@ -4146,7 +4189,7 @@ function activateKillstreak() {
 
 function toggleNightVision() {
   player.nightVision = !player.nightVision;
-  renderer.toneMappingExposure = player.nightVision ? 1.55 : 1.05;
+  renderer.toneMappingExposure = player.nightVision ? EXPOSURE_NIGHT_VISION : EXPOSURE_BASE;
   addMessage(`D-pad down night vision ${player.nightVision ? "on" : "off"}.`);
 }
 
@@ -4695,8 +4738,8 @@ function updateRumaiaSequence(dt) {
   game.nuke.shockwave.material.opacity = 0.36 * (1 - progress);
   game.nuke.shockwave.rotation.y += dt * 1.6;
   game.nuke.light.intensity = 9 * flash;
-  renderer.toneMappingExposure = 1.05 + flash * 1.35;
-  scene.fog.density = 0.0085 + blast * 0.026;
+  renderer.toneMappingExposure = EXPOSURE_BASE + flash * EXPOSURE_NUKE_FLASH_BOOST;
+  scene.fog.density = 0.0078 + blast * 0.026;
 
   if (game.time >= game.nukeNextSmokeAt) {
     game.nukeNextSmokeAt = game.time + 0.18;
@@ -4758,7 +4801,7 @@ function spawnKaijuBoss() {
   for (const mesh of game.kaijuBoss.hitMeshes) {
     enemyHitMeshes.push(mesh);
   }
-  renderer.toneMappingExposure = 1.08;
+  renderer.toneMappingExposure = EXPOSURE_BASE;
   scene.fog.density = 0.009;
   game.objectiveMessage = "KAIJU BOSS active. 5000 HP. Shoot the huge sprite and dodge fireballs.";
   showBossIntro("KAIJU BOSS", "5000 HP. Slow advance. Fireball barrage");
@@ -4786,7 +4829,7 @@ function updateKaijuSequence(dt) {
     const remaining = Math.max(0, Math.ceil(game.kaijuSpawnAt - game.time));
     const progress = clamp((game.time - game.kaijuStormStartedAt) / kaijuStormClearDelay, 0, 1);
     scene.fog.density = 0.026 - progress * 0.017;
-    renderer.toneMappingExposure = 1.35 - progress * 0.27;
+    renderer.toneMappingExposure = EXPOSURE_STORM_PEAK - progress * (EXPOSURE_STORM_PEAK - EXPOSURE_BASE);
     game.objectiveMessage = `Storm clearing. Kaiju contact in ${remaining}s.`;
     if (game.time >= game.kaijuRoarAt) {
       game.kaijuRoarAt = game.time + 1.35;
@@ -6352,9 +6395,11 @@ function updateKaijuHealthUi() {
   if (!visible) return;
   if (revengeVisible) {
     const current = Math.max(0, Math.ceil(game.rumaiaRevenge.health));
+    const ratio = clamp(current / rumaiaRevengeHealth, 0, 1);
     ui.bossHealthLabel.textContent = "RUMAIA REVENGE";
     ui.kaijuHealthValue.textContent = `${current} / ${rumaiaRevengeHealth}`;
-    ui.kaijuHealthBar.style.width = `${clamp(current / rumaiaRevengeHealth, 0, 1) * 100}%`;
+    ui.kaijuHealthBar.style.width = `${ratio * 100}%`;
+    ui.kaijuHealth.classList.toggle("danger", ratio <= 0.25);
     return;
   }
   const boss = game.kaijuBoss;
@@ -6362,6 +6407,7 @@ function updateKaijuHealthUi() {
   ui.bossHealthLabel.textContent = "KAIJU BOSS";
   ui.kaijuHealthValue.textContent = `${current} / ${boss.maxHealth}`;
   ui.kaijuHealthBar.style.width = `${boss.healthRatio * 100}%`;
+  ui.kaijuHealth.classList.toggle("danger", boss.healthRatio <= 0.25);
 }
 
 function updateHUD() {
