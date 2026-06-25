@@ -12,23 +12,6 @@ const playerSkins = [
   { id: "three", label: "Juliana", textureIndex: 2, tint: 0xffffff, color: "#8f9693" }
 ];
 const legacySkinAliases = { gold: "three" };
-const playerSpriteSources = [
-  {
-    src: "/assets/player-duo-sheet.png",
-    fallback: "rgba(40, 67, 108, 0.75)",
-    section: { x: 22, width: 642 }
-  },
-  {
-    src: "/assets/player-duo-sheet.png",
-    fallback: "rgba(42, 43, 42, 0.75)",
-    section: { x: 708, width: 630 }
-  },
-  {
-    src: "/assets/player-three-sheet.png",
-    fallback: "rgba(72, 76, 75, 0.75)",
-    section: { x: 708, width: 630 }
-  }
-];
 const skinButtonMarkup = playerSkins.map((skin) => `
   <button class="skin-option" type="button" data-skin="${skin.id}">
     <span class="skin-swatch" style="--skin-color: ${skin.color}"></span>
@@ -46,12 +29,8 @@ const rewardSongVideoId = "a-fHLBXO8pY";
 const rewardSongDuration = 35;
 const introVideoSrc = "/assets/jaydens-warzone-intro.mp4";
 const introMaxDuration = 150;
-const dragonSpriteSheetSrc = "/assets/enemy-dragon-detail-sheet.png";
-const fireballSpriteSheetSrc = "/assets/fireball-sheet.png";
-const finalBossSpriteSheetSrc = "/assets/final-boss-sheet.png";
-const finalBossCutsceneSrc = "/assets/final-boss-cutscene.png";
+const finalBossCutsceneSrc = "/assets/sprites/boss-cutscene/cutscene.png";
 const aerialBossSpriteSheetSrc = "/assets/aerial-boss-sheet.png";
-const rumaiaSpriteSheetSrc = "/assets/rumaia-sheet.png";
 const fireballGravity = 3.8;
 const fireballBaseSpeed = 21;
 const fireballRadius = 0.55;
@@ -1061,442 +1040,15 @@ function makeNoiseTexture() {
   return texture;
 }
 
-const dragonSpriteCells = [
-  { x: 0, y: 34, w: 242, h: 322 },
-  { x: 246, y: 36, w: 232, h: 318 },
-  { x: 468, y: 34, w: 248, h: 322 },
-  { x: 1050, y: 398, w: 302, h: 294 },
-  { x: 1048, y: 392, w: 304, h: 302 },
-  { x: 724, y: 34, w: 244, h: 326 },
-  { x: 952, y: 34, w: 246, h: 326 },
-  { x: 1186, y: 34, w: 214, h: 322 }
+// Legacy crop data kept only for the aerial boss "dash" frames: those 4 poses failed
+// AI re-generation (moderation rejected the source crop framing), so they still render
+// straight from the original sheet via the old canvas-crop + background-removal path.
+const aerialDashCells = [
+  { x: 656, y: 78, w: 178, h: 214 },
+  { x: 658, y: 350, w: 174, h: 210 },
+  { x: 660, y: 650, w: 174, h: 210 },
+  { x: 662, y: 936, w: 172, h: 210 }
 ];
-
-const dragonAttackCell = { x: 354, y: 414, w: 344, h: 284 };
-const fireballCells = {
-  projectile: { x: 858, y: 158, w: 190, h: 128 },
-  impact: { x: 28, y: 548, w: 210, h: 118 }
-};
-
-const bossSpriteCells = {
-  idle: { x: 20, y: 32, w: 286, h: 552 },
-  aim: { x: 350, y: 58, w: 300, h: 236 },
-  fire: { x: 670, y: 58, w: 336, h: 220 },
-  crouch: { x: 382, y: 342, w: 266, h: 292 },
-  run: { x: 740, y: 324, w: 270, h: 396 },
-  hit: { x: 48, y: 614, w: 286, h: 342 },
-  taunt: { x: 392, y: 636, w: 214, h: 312 },
-  down: { x: 616, y: 738, w: 404, h: 252 }
-};
-
-const rumaiaSpriteCells = [
-  { x: 20, y: 18, w: 284, h: 384 },
-  { x: 336, y: 18, w: 286, h: 384 },
-  { x: 650, y: 18, w: 244, h: 382 },
-  { x: 950, y: 16, w: 280, h: 390 },
-  { x: 28, y: 438, w: 282, h: 384 },
-  { x: 336, y: 432, w: 292, h: 390 },
-  { x: 660, y: 438, w: 244, h: 380 },
-  { x: 976, y: 432, w: 246, h: 388 }
-];
-
-const aerialBossSpriteCells = {
-  swing: [
-    { x: 14, y: 74, w: 190, h: 252 },
-    { x: 14, y: 348, w: 190, h: 254 },
-    { x: 18, y: 648, w: 188, h: 252 },
-    { x: 14, y: 934, w: 192, h: 258 }
-  ],
-  spin: [
-    { x: 230, y: 76, w: 206, h: 174 },
-    { x: 232, y: 306, w: 204, h: 176 },
-    { x: 236, y: 520, w: 198, h: 170 },
-    { x: 244, y: 738, w: 188, h: 176 },
-    { x: 238, y: 966, w: 196, h: 176 }
-  ],
-  glide: [
-    { x: 472, y: 78, w: 166, h: 256 },
-    { x: 472, y: 338, w: 166, h: 250 },
-    { x: 488, y: 636, w: 154, h: 254 },
-    { x: 488, y: 932, w: 154, h: 254 }
-  ],
-  dash: [
-    { x: 656, y: 78, w: 178, h: 214 },
-    { x: 658, y: 350, w: 174, h: 210 },
-    { x: 660, y: 650, w: 174, h: 210 },
-    { x: 662, y: 936, w: 172, h: 210 }
-  ]
-};
-
-function drawContainedCell(ctx, image, cell, maxWidth = 468, maxHeight = 492, yBias = 0) {
-  const scale = Math.min(maxWidth / cell.w, maxHeight / cell.h);
-  const width = cell.w * scale;
-  const height = cell.h * scale;
-  const x = (512 - width) * 0.5;
-  const y = (512 - height) * 0.5 + yBias;
-  ctx.drawImage(image, cell.x, cell.y, cell.w, cell.h, x, y, width, height);
-}
-
-function createBossSpriteTexture(pose = "idle") {
-  const cell = bossSpriteCells[pose] || bossSpriteCells.idle;
-  const canvas = document.createElement("canvas");
-  canvas.width = 512;
-  canvas.height = 512;
-  const ctx = canvas.getContext("2d");
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  const gradient = ctx.createLinearGradient(0, 60, 0, 452);
-  gradient.addColorStop(0, "rgba(75, 110, 150, 0.85)");
-  gradient.addColorStop(0.52, "rgba(24, 46, 78, 0.78)");
-  gradient.addColorStop(1, "rgba(10, 14, 18, 0.9)");
-  ctx.fillStyle = gradient;
-  ctx.beginPath();
-  ctx.ellipse(256, 270, 96, 196, 0, 0, Math.PI * 2);
-  ctx.fill();
-  texture.needsUpdate = true;
-
-  const image = new Image();
-  image.onload = () => {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    drawContainedCell(ctx, image, cell, pose === "down" ? 500 : 468, pose === "down" ? 330 : 492, pose === "down" ? 72 : 0);
-    removeConnectedSheetBackground(ctx, canvas.width, canvas.height);
-    removeConnectedGreyBackground(ctx, canvas.width, canvas.height);
-    trimAlphaToCenter(ctx, canvas.width, canvas.height, pose === "down" ? 22 : 8);
-    texture.needsUpdate = true;
-  };
-  image.src = finalBossSpriteSheetSrc;
-  return texture;
-}
-
-function createRumaiaSpriteTexture(cellIndex = 0) {
-  const cell = rumaiaSpriteCells[cellIndex] || rumaiaSpriteCells[0];
-  const canvas = document.createElement("canvas");
-  canvas.width = 512;
-  canvas.height = 512;
-  const ctx = canvas.getContext("2d");
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = "rgba(186, 83, 220, 0.82)";
-  ctx.beginPath();
-  ctx.ellipse(256, 254, 112, 176, 0, 0, Math.PI * 2);
-  ctx.fill();
-  texture.needsUpdate = true;
-
-  const image = new Image();
-  image.onload = () => {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    drawContainedCell(ctx, image, cell, 430, 476, 4);
-    removeConnectedLightBackground(ctx, canvas.width, canvas.height);
-    trimAlphaToCenter(ctx, canvas.width, canvas.height, 18);
-    texture.needsUpdate = true;
-  };
-  image.src = rumaiaSpriteSheetSrc;
-  return texture;
-}
-
-function createAerialBossSpriteTexture(mode = "glide", frame = 0) {
-  const frames = aerialBossSpriteCells[mode] || aerialBossSpriteCells.glide;
-  const cell = frames[frame % frames.length] || frames[0];
-  const canvas = document.createElement("canvas");
-  canvas.width = 512;
-  canvas.height = 512;
-  const ctx = canvas.getContext("2d");
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  const gradient = ctx.createRadialGradient(256, 244, 22, 256, 256, 196);
-  gradient.addColorStop(0, "rgba(248, 90, 68, 0.9)");
-  gradient.addColorStop(0.44, "rgba(39, 196, 177, 0.72)");
-  gradient.addColorStop(1, "rgba(23, 75, 96, 0.22)");
-  ctx.fillStyle = gradient;
-  ctx.beginPath();
-  ctx.ellipse(256, 268, 108, 178, 0, 0, Math.PI * 2);
-  ctx.fill();
-  texture.needsUpdate = true;
-
-  const image = new Image();
-  image.onload = () => {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    drawContainedCell(ctx, image, cell, 458, 484, mode === "spin" ? 10 : 2);
-    removeConnectedBlueBackground(ctx, canvas.width, canvas.height);
-    trimAlphaToCenter(ctx, canvas.width, canvas.height, mode === "spin" ? 26 : 14);
-    texture.needsUpdate = true;
-  };
-  image.src = aerialBossSpriteSheetSrc;
-  return texture;
-}
-
-function createDragonSpriteTexture(cellIndex) {
-  const cell = dragonSpriteCells[cellIndex] || dragonSpriteCells[0];
-  const canvas = document.createElement("canvas");
-  canvas.width = 512;
-  canvas.height = 512;
-  const ctx = canvas.getContext("2d");
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = "rgba(120, 74, 48, 0.75)";
-  ctx.beginPath();
-  ctx.ellipse(256, 256, 86, 160, 0, 0, Math.PI * 2);
-  ctx.fill();
-  texture.needsUpdate = true;
-
-  const image = new Image();
-  image.onload = () => {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(image, cell.x, cell.y, cell.w, cell.h, 22, 10, 468, 492);
-    removeConnectedSheetBackground(ctx, canvas.width, canvas.height);
-    trimAlphaToCenter(ctx, canvas.width, canvas.height, 8);
-    texture.needsUpdate = true;
-  };
-  image.src = dragonSpriteSheetSrc;
-  return texture;
-}
-
-function createDragonAttackTexture() {
-  const canvas = document.createElement("canvas");
-  canvas.width = 512;
-  canvas.height = 512;
-  const ctx = canvas.getContext("2d");
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = "rgba(98, 124, 70, 0.72)";
-  ctx.beginPath();
-  ctx.ellipse(256, 260, 176, 112, 0, 0, Math.PI * 2);
-  ctx.fill();
-  texture.needsUpdate = true;
-
-  const image = new Image();
-  image.onload = () => {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(image, dragonAttackCell.x, dragonAttackCell.y, dragonAttackCell.w, dragonAttackCell.h, 2, 58, 508, 386);
-    removeConnectedSheetBackground(ctx, canvas.width, canvas.height);
-    trimAlphaToCenter(ctx, canvas.width, canvas.height, 4);
-    texture.needsUpdate = true;
-  };
-  image.src = dragonSpriteSheetSrc;
-  return texture;
-}
-
-function createFireballSpriteTexture(kind = "projectile") {
-  const cell = fireballCells[kind] || fireballCells.projectile;
-  const canvas = document.createElement("canvas");
-  canvas.width = 512;
-  canvas.height = 512;
-  const ctx = canvas.getContext("2d");
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  const gradient = ctx.createRadialGradient(256, 256, 12, 256, 256, 210);
-  gradient.addColorStop(0, "rgba(255, 246, 168, 0.94)");
-  gradient.addColorStop(0.42, "rgba(255, 118, 30, 0.72)");
-  gradient.addColorStop(1, "rgba(120, 24, 8, 0)");
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  texture.needsUpdate = true;
-
-  const image = new Image();
-  image.onload = () => {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(image, cell.x, cell.y, cell.w, cell.h, 26, kind === "impact" ? 94 : 124, 460, kind === "impact" ? 270 : 232);
-    removeConnectedGreyBackground(ctx, canvas.width, canvas.height);
-    trimAlphaToCenter(ctx, canvas.width, canvas.height, 8);
-    texture.needsUpdate = true;
-  };
-  image.src = fireballSpriteSheetSrc;
-  return texture;
-}
-
-function createPlayerSpriteTexture(playerIndex, poseIndex) {
-  const source = playerSpriteSources[playerIndex] || playerSpriteSources[0];
-  const canvas = document.createElement("canvas");
-  canvas.width = 512;
-  canvas.height = 512;
-  const ctx = canvas.getContext("2d");
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = source.fallback;
-  ctx.beginPath();
-  ctx.ellipse(256, 260, 74, 178, 0, 0, Math.PI * 2);
-  ctx.fill();
-  texture.needsUpdate = true;
-
-  const image = new Image();
-  image.onload = () => {
-    const col = poseIndex % 4;
-    const row = Math.floor(poseIndex / 4);
-    const section = source.section;
-    const cellWidth = section.width / 4;
-    const sourceX = section.x + col * cellWidth + 2;
-    const sourceY = row === 0 ? 58 : 414;
-    const sourceW = cellWidth - 4;
-    const sourceH = row === 0 ? 302 : 314;
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(image, sourceX, sourceY, sourceW, sourceH, 54, 22, 404, 468);
-    removeConnectedGreyBackground(ctx, canvas.width, canvas.height);
-    trimAlphaToCenter(ctx, canvas.width, canvas.height, 18);
-    texture.needsUpdate = true;
-  };
-  image.src = source.src;
-  return texture;
-}
-
-function removeConnectedSheetBackground(ctx, width, height) {
-  const imageData = ctx.getImageData(0, 0, width, height);
-  const data = imageData.data;
-  const visited = new Uint8Array(width * height);
-  const queue = [];
-
-  const shouldErase = (index) => {
-    const p = index * 4;
-    const r = data[p];
-    const g = data[p + 1];
-    const b = data[p + 2];
-    const a = data[p + 3];
-    return a < 18 || (r < 62 && g < 66 && b < 70 && Math.abs(r - g) < 18 && Math.abs(g - b) < 22);
-  };
-
-  const enqueue = (x, y) => {
-    if (x < 0 || x >= width || y < 0 || y >= height) return;
-    const index = y * width + x;
-    if (visited[index] || !shouldErase(index)) return;
-    visited[index] = 1;
-    queue.push(index);
-  };
-
-  for (let x = 0; x < width; x += 1) {
-    enqueue(x, 0);
-    enqueue(x, height - 1);
-  }
-  for (let y = 0; y < height; y += 1) {
-    enqueue(0, y);
-    enqueue(width - 1, y);
-  }
-
-  while (queue.length) {
-    const index = queue.pop();
-    const p = index * 4;
-    data[p + 3] = 0;
-    const x = index % width;
-    const y = Math.floor(index / width);
-    enqueue(x + 1, y);
-    enqueue(x - 1, y);
-    enqueue(x, y + 1);
-    enqueue(x, y - 1);
-  }
-
-  ctx.putImageData(imageData, 0, 0);
-}
-
-function removeConnectedGreyBackground(ctx, width, height) {
-  const imageData = ctx.getImageData(0, 0, width, height);
-  const data = imageData.data;
-  const visited = new Uint8Array(width * height);
-  const queue = [];
-
-  const shouldErase = (index) => {
-    const p = index * 4;
-    const r = data[p];
-    const g = data[p + 1];
-    const b = data[p + 2];
-    const a = data[p + 3];
-    const max = Math.max(r, g, b);
-    const min = Math.min(r, g, b);
-    return a < 18 || (max - min < 24 && max > 115 && max < 248);
-  };
-
-  const enqueue = (x, y) => {
-    if (x < 0 || x >= width || y < 0 || y >= height) return;
-    const index = y * width + x;
-    if (visited[index] || !shouldErase(index)) return;
-    visited[index] = 1;
-    queue.push(index);
-  };
-
-  for (let x = 0; x < width; x += 1) {
-    enqueue(x, 0);
-    enqueue(x, height - 1);
-  }
-  for (let y = 0; y < height; y += 1) {
-    enqueue(0, y);
-    enqueue(width - 1, y);
-  }
-
-  while (queue.length) {
-    const index = queue.pop();
-    const p = index * 4;
-    data[p + 3] = 0;
-    const x = index % width;
-    const y = Math.floor(index / width);
-    enqueue(x + 1, y);
-    enqueue(x - 1, y);
-    enqueue(x, y + 1);
-    enqueue(x, y - 1);
-  }
-
-  ctx.putImageData(imageData, 0, 0);
-}
-
-function removeConnectedLightBackground(ctx, width, height) {
-  const imageData = ctx.getImageData(0, 0, width, height);
-  const data = imageData.data;
-  const visited = new Uint8Array(width * height);
-  const queue = [];
-
-  const shouldErase = (index) => {
-    const p = index * 4;
-    const r = data[p];
-    const g = data[p + 1];
-    const b = data[p + 2];
-    const a = data[p + 3];
-    const max = Math.max(r, g, b);
-    const min = Math.min(r, g, b);
-    return a < 18 || (max - min < 32 && max > 142);
-  };
-
-  const enqueue = (x, y) => {
-    if (x < 0 || x >= width || y < 0 || y >= height) return;
-    const index = y * width + x;
-    if (visited[index] || !shouldErase(index)) return;
-    visited[index] = 1;
-    queue.push(index);
-  };
-
-  for (let x = 0; x < width; x += 1) {
-    enqueue(x, 0);
-    enqueue(x, height - 1);
-  }
-  for (let y = 0; y < height; y += 1) {
-    enqueue(0, y);
-    enqueue(width - 1, y);
-  }
-
-  while (queue.length) {
-    const index = queue.pop();
-    const p = index * 4;
-    data[p + 3] = 0;
-    const x = index % width;
-    const y = Math.floor(index / width);
-    enqueue(x + 1, y);
-    enqueue(x - 1, y);
-    enqueue(x, y + 1);
-    enqueue(x, y - 1);
-  }
-
-  ctx.putImageData(imageData, 0, 0);
-}
 
 function removeConnectedBlueBackground(ctx, width, height) {
   const imageData = ctx.getImageData(0, 0, width, height);
@@ -1582,6 +1134,41 @@ function trimAlphaToCenter(ctx, width, height, padding = 14) {
   scratchCtx.putImageData(imageData, 0, 0);
   ctx.clearRect(0, 0, width, height);
   ctx.drawImage(scratch, minX, minY, sourceW, sourceH, targetX, targetY, targetW, targetH);
+}
+
+function createAerialDashTexture(frame) {
+  const cell = aerialDashCells[frame % aerialDashCells.length] || aerialDashCells[0];
+  const canvas = document.createElement("canvas");
+  canvas.width = 512;
+  canvas.height = 512;
+  const ctx = canvas.getContext("2d");
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+
+  const image = new Image();
+  image.onload = () => {
+    const scale = Math.min(458 / cell.w, 484 / cell.h);
+    const width = cell.w * scale;
+    const height = cell.h * scale;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(image, cell.x, cell.y, cell.w, cell.h, (512 - width) * 0.5, (512 - height) * 0.5 + 2, width, height);
+    removeConnectedBlueBackground(ctx, canvas.width, canvas.height);
+    trimAlphaToCenter(ctx, canvas.width, canvas.height, 14);
+    texture.needsUpdate = true;
+  };
+  image.src = aerialBossSpriteSheetSrc;
+  return texture;
+}
+
+const spriteTextureLoader = new THREE.TextureLoader();
+
+function loadSpriteTexture(path) {
+  const texture = spriteTextureLoader.load(path);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.generateMipmaps = true;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  return texture;
 }
 
 function createSharedAssets() {
@@ -1696,22 +1283,26 @@ function createSharedAssets() {
     plane: new THREE.PlaneGeometry(1, 1)
   };
 
-  shared.enemySpriteTextures = Array.from({ length: 8 }, (_, index) => createDragonSpriteTexture(index));
-  shared.enemyAttackTexture = createDragonAttackTexture();
+  shared.enemySpriteTextures = Array.from({ length: 8 }, (_, index) => loadSpriteTexture(`/assets/sprites/dragon/pose${index}.png`));
+  shared.enemyAttackTexture = loadSpriteTexture("/assets/sprites/dragon/attack.png");
   shared.bossSpriteTextures = Object.fromEntries(
-    Object.keys(bossSpriteCells).map((pose) => [pose, createBossSpriteTexture(pose)])
-  );
-  shared.aerialBossSpriteTextures = Object.fromEntries(
-    Object.entries(aerialBossSpriteCells).map(([mode, frames]) => [
-      mode,
-      frames.map((_, index) => createAerialBossSpriteTexture(mode, index))
+    ["idle", "aim", "fire", "crouch", "run", "hit", "taunt", "down"].map((pose) => [
+      pose,
+      loadSpriteTexture(`/assets/sprites/boss/${pose}.png`)
     ])
   );
-  shared.rumaiaSpriteTextures = Array.from({ length: 8 }, (_, index) => createRumaiaSpriteTexture(index));
-  shared.fireballTexture = createFireballSpriteTexture("projectile");
-  shared.fireballImpactTexture = createFireballSpriteTexture("impact");
-  shared.playerSpriteTextures = playerSpriteSources.map((_, playerIndex) => (
-    Array.from({ length: 8 }, (_, index) => createPlayerSpriteTexture(playerIndex, index))
+  shared.aerialBossSpriteTextures = {
+    swing: Array.from({ length: 4 }, (_, index) => loadSpriteTexture(`/assets/sprites/aerial/swing${index}.png`)),
+    spin: Array.from({ length: 5 }, (_, index) => loadSpriteTexture(`/assets/sprites/aerial/spin${index}.png`)),
+    glide: Array.from({ length: 4 }, (_, index) => loadSpriteTexture(`/assets/sprites/aerial/glide${index}.png`)),
+    // dash poses didn't survive AI regeneration (moderation rejected the crop framing) — still built from the original sheet.
+    dash: Array.from({ length: 4 }, (_, index) => createAerialDashTexture(index))
+  };
+  shared.rumaiaSpriteTextures = Array.from({ length: 8 }, (_, index) => loadSpriteTexture(`/assets/sprites/rumaia/pose${index}.png`));
+  shared.fireballTexture = loadSpriteTexture("/assets/sprites/fireball/projectile.png");
+  shared.fireballImpactTexture = loadSpriteTexture("/assets/sprites/fireball/impact.png");
+  shared.playerSpriteTextures = [0, 1, 2].map((skinIndex) => (
+    Array.from({ length: 8 }, (_, poseIndex) => loadSpriteTexture(`/assets/sprites/players/p${skinIndex}-pose${poseIndex}.png`))
   ));
 }
 
