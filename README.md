@@ -16,3 +16,4 @@ npm run dev
 ```bash
 npm run build
 ```
+<img width="1448" height="1086" alt="ChatGPT Image Jun 28, 2026, 09_28_09 PM" src="https://github.com/user-attachments/assets/ba046503-4e17-4405-9ede-f1eb4d97ede1" />
